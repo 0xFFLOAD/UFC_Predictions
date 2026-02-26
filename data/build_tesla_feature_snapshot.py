@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-DATASET = Path(__file__).with_name("TSLA_Stock_Dataset_2012_2026.csv")
+DATASET = Path(__file__).with_name("TSLA.csv")
 OUT = Path(__file__).with_name("tesla_feature_snapshot.json")
 
 

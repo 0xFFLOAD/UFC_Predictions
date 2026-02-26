@@ -1,33 +1,43 @@
 #!/bin/bash
-# Quick start guide for UFC prediction model
+# Quick start guide for Tesla forecast model
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║         UFC NEURAL NETWORK QUICK START                  ║"
+echo "║         TESLA FORECAST QUICK START                      ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
-echo "This guide walks you through training and using the UFC"
-echo "winner prediction neural network."
+echo "This guide walks you through training and using the"
+echo "Tesla stock forecast model."
 echo ""
 
 cd "$(dirname "$0")"
+
+DATASET_PRIMARY="../data/TSLA.csv"
+DATASET_FALLBACK="data/TSLA.csv"
+DATASET=""
+
+if [ -f "$DATASET_PRIMARY" ]; then
+    DATASET="$DATASET_PRIMARY"
+elif [ -f "$DATASET_FALLBACK" ]; then
+    DATASET="$DATASET_FALLBACK"
+fi
 
 echo "📍 Current directory: $(pwd)"
 echo ""
 
 # Step 1: Verify data
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Step 1: Verify UFC Dataset"
+echo "Step 1: Verify Tesla Dataset"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if [ -f "../data/ufc_fights_full_with_odds.csv" ]; then
-    lines=$(wc -l < "../data/ufc_fights_full_with_odds.csv")
-    size=$(ls -lh "../data/ufc_fights_full_with_odds.csv" | awk '{print $5}')
-    echo "✅ Dataset found: ../data/ufc_fights_full_with_odds.csv"
+if [ -n "$DATASET" ]; then
+    lines=$(wc -l < "$DATASET")
+    size=$(ls -lh "$DATASET" | awk '{print $5}')
+    echo "✅ Dataset found: $DATASET"
     echo "   Lines: $lines"
     echo "   Size: $size"
 else
     echo "❌ Dataset not found!"
-    echo "   Please ensure ../data/ufc_fights_full_with_odds.csv exists"
+    echo "   Checked: $DATASET_PRIMARY and $DATASET_FALLBACK"
     exit 1
 fi
 
@@ -38,8 +48,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Step 2: Build Neural Network"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if [ -f "ufc_nn" ]; then
-    echo "✅ Executable already built: ufc_nn"
+if [ -f "tsla_nn" ]; then
+    echo "✅ Executable already built: tsla_nn"
 else
     echo "🔨 Building..."
     if make > /dev/null 2>&1; then
@@ -57,9 +67,9 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Step 3: Train Model"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-if [ -f "ufc_model.bin" ]; then
-    size=$(ls -lh "ufc_model.bin" | awk '{print $5}')
-    echo "✅ Trained model exists: ufc_model.bin ($size)"
+if [ -f "tsla_model.bin" ]; then
+    size=$(ls -lh "tsla_model.bin" | awk '{print $5}')
+    echo "✅ Trained model exists: tsla_model.bin ($size)"
     echo ""
     read -p "Retrain from scratch? (y/N) " -n 1 -r
     echo
@@ -67,14 +77,13 @@ if [ -f "ufc_model.bin" ]; then
         echo "Keeping existing model."
     else
         echo ""
-        echo "Training on 7,000+ UFC fights..."
-        echo "This may take 1-5 minutes..."
+        echo "Training baseline on historical TSLA closes..."
         echo ""
         make train
     fi
 else
     echo "No trained model found. Training now..."
-    echo "This will take 1-5 minutes..."
+    echo "This takes a few seconds..."
     echo ""
     read -p "Continue? (Y/n) " -n 1 -r
     echo
@@ -95,7 +104,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo "Usage examples:"
 echo ""
-echo "  1. Interactive prediction:"
+echo "  1. Forecast next period:"
 echo "     make predict"
 echo ""
 echo "  2. Show model info:"
@@ -109,11 +118,11 @@ echo "     make train"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "Example prediction session:"
+echo "Example prediction output:"
 echo ""
 echo "  \$ make predict"
-echo "  >>> Fighter 1 stats: 180 185 28 4.5 2.1"
-echo "  >>> Fighter 2 stats: 175 178 32 3.8 1.5"
-echo "  >>> Output: Fighter 1 win probability: 67.32%"
+echo "  >>> Predicted close: ..."
+echo "  >>> Expected return: ...%"
+echo "  >>> Bullish probability: ...%"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -4,7 +4,7 @@ import csv
 from pathlib import Path
 
 
-DATASET = Path(__file__).with_name("TSLA_Stock_Dataset_2012_2026.csv")
+DATASET = Path(__file__).with_name("TSLA.csv")
 
 
 def to_float(value: str) -> float:

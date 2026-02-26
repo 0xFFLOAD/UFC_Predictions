@@ -31,7 +31,7 @@ make odds-table
 
 Primary dataset:
 
-- `data/TSLA_Stock_Dataset_2012_2026.csv` — Daily TSLA OHLCV data
+- `data/TSLA.csv` — Daily TSLA OHLCV data
 
 Preview and feature snapshot:
 

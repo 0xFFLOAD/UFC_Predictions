@@ -1,26 +1,36 @@
 #!/bin/bash
-# Quick demo of UFC prediction model
+# Quick demo of Tesla forecast model
 
 set -e
 
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  UFC Winner Prediction Neural Network Demo        ║"
+echo "║  Tesla Stock Forecast Model Demo                  ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo ""
 
 cd "$(dirname "$0")"
 
+DATASET_PRIMARY="../data/TSLA.csv"
+DATASET_FALLBACK="data/TSLA.csv"
+DATASET=""
+
+if [ -f "$DATASET_PRIMARY" ]; then
+    DATASET="$DATASET_PRIMARY"
+elif [ -f "$DATASET_FALLBACK" ]; then
+    DATASET="$DATASET_FALLBACK"
+fi
+
 # Check if data exists
-if [ ! -f "../data/ufc_fights_full_with_odds.csv" ]; then
-    echo "❌ Error: UFC dataset not found!"
-    echo "   Expected: ../data/ufc_fights_full_with_odds.csv"
+if [ -z "$DATASET" ]; then
+    echo "❌ Error: Tesla dataset not found!"
+    echo "   Checked: $DATASET_PRIMARY and $DATASET_FALLBACK"
     exit 1
 fi
 
-echo "✅ UFC dataset found"
+echo "✅ Tesla dataset found: $DATASET"
 
 # Build if needed
-if [ ! -f "ufc_nn" ]; then
+if [ ! -f "tsla_nn" ]; then
     echo "🔨 Building model..."
     make > /dev/null 2>&1
     echo "✅ Model built successfully"
@@ -29,12 +39,12 @@ else
 fi
 
 # Check if trained model exists
-if [ -f "ufc_model.bin" ]; then
-    echo "✅ Trained model found (ufc_model.bin)"
+if [ -f "tsla_model.bin" ]; then
+    echo "✅ Trained model found (tsla_model.bin)"
     echo ""
     echo "Run the following commands:"
     echo ""
-    echo "  make predict    # Interactive prediction mode"
+    echo "  make predict    # Next-period forecast"
     echo "  make info       # Show model information"
     echo "  make train      # Retrain from scratch"
     echo "  python3 evaluate.py  # Evaluate model performance"
@@ -46,10 +56,10 @@ else
     echo "  make train"
     echo ""
     echo "This will:"
-    echo "  • Load 7,340+ UFC fights from historical data"
-    echo "  • Train a 14→64→32→1 neural network"
-    echo "  • Save the trained model to ufc_model.bin"
-    echo "  • Take ~1-5 minutes depending on your CPU"
+    echo "  • Load TSLA monthly OHLCV history"
+    echo "  • Estimate baseline return + volatility"
+    echo "  • Save model to tsla_model.bin"
+    echo "  • Finish in seconds"
     echo ""
     read -p "Train now? (y/N) " -n 1 -r
     echo
@@ -62,14 +72,9 @@ fi
 
 echo ""
 echo "═══════════════════════════════════════════════════"
-echo "Model Architecture:"
-echo "  Input:  14 features (fighter stat deltas)"
-echo "  Hidden: 64 neurons (tanh) → 32 neurons (tanh)"
-echo "  Output: P(Fighter 1 wins)"
-echo ""
-echo "Features include:"
-echo "  • Physical: height, reach, age, weight deltas"
-echo "  • Striking: accuracy, output, absorbed, defense"
-echo "  • Grappling: takedowns, submissions"
-echo "  • Derived: striking advantage, grappling score"
+echo "Model Output:"
+echo "  • Forecast date"
+echo "  • Predicted close"
+echo "  • Expected return (%)"
+echo "  • Bullish probability (%)"
 echo "═══════════════════════════════════════════════════"
