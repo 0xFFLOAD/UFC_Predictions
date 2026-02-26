@@ -52,6 +52,7 @@
 #define FEAT_WEIGHTED_SCORE_DELTA 17 /* win-rate weighted by experience */
 #define FEAT_SUB_STYLE_DELTA    18  /* submission-specialist style bias */
 #define FEAT_H2H_DELTA          19  /* direct head-to-head prior bias */
+#define PROFILE_FEAT_COUNT      14  /* profile similarity uses stat-delta features only */
 
 typedef struct FighterRecord {
     char name[64];
@@ -1004,6 +1005,142 @@ static void compute_features(UFCFight *fight, double *features, MatchContext *ct
     features[FEAT_H2H_DELTA] = head_to_head_bias(h, fight->fighter1, fight->fighter2);
 }
 
+static void compute_profile_features(const UFCFight *fight, double *features) {
+    features[FEAT_HEIGHT_DELTA] = fight->f1_height - fight->f2_height;
+    features[FEAT_REACH_DELTA] = fight->f1_reach - fight->f2_reach;
+    features[FEAT_AGE_DELTA] = fight->f1_age - fight->f2_age;
+    features[FEAT_SIG_STRIKE_PM_DELTA] = fight->f1_sig_strikes_pm - fight->f2_sig_strikes_pm;
+    features[FEAT_SIG_STRIKE_ACC_DELTA] = fight->f1_sig_strikes_acc - fight->f2_sig_strikes_acc;
+    features[FEAT_SIG_STRIKE_ABS_DELTA] = fight->f1_sig_strikes_abs - fight->f2_sig_strikes_abs;
+    features[FEAT_SIG_STRIKE_DEF_DELTA] = fight->f1_sig_strikes_def - fight->f2_sig_strikes_def;
+    features[FEAT_TAKEDOWN_AVG_DELTA] = fight->f1_takedown_avg - fight->f2_takedown_avg;
+    features[FEAT_TAKEDOWN_ACC_DELTA] = fight->f1_takedown_acc - fight->f2_takedown_acc;
+    features[FEAT_TAKEDOWN_DEF_DELTA] = fight->f1_takedown_def - fight->f2_takedown_def;
+    features[FEAT_SUB_AVG_DELTA] = fight->f1_sub_avg - fight->f2_sub_avg;
+    features[FEAT_WEIGHT_DELTA] = fight->f1_weight - fight->f2_weight;
+
+    double f1_strike_net = fight->f1_sig_strikes_pm - fight->f1_sig_strikes_abs;
+    double f2_strike_net = fight->f2_sig_strikes_pm - fight->f2_sig_strikes_abs;
+    features[FEAT_STRIKING_ADVANTAGE] = f1_strike_net - f2_strike_net;
+
+    double f1_grapple = fight->f1_takedown_avg * fight->f1_takedown_acc + fight->f1_sub_avg;
+    double f2_grapple = fight->f2_takedown_avg * fight->f2_takedown_acc + fight->f2_sub_avg;
+    features[FEAT_GRAPPLING_SCORE] = f1_grapple - f2_grapple;
+}
+
+static int estimate_similar_fights_probability(const UFCFight *query,
+                                               UFCFight *fights,
+                                               int num_fights,
+                                               const char *weight_class,
+                                               const Model *model,
+                                               int k_neighbors,
+                                               long double *out_prob,
+                                               int *out_neighbors) {
+    if (!query || !fights || num_fights <= 0 || !weight_class || !model || !out_prob || !out_neighbors || k_neighbors <= 0) {
+        return -1;
+    }
+
+    double qf[PROFILE_FEAT_COUNT] = {0};
+    compute_profile_features(query, qf);
+
+    long double *top_scores = malloc((size_t)k_neighbors * sizeof(long double));
+    int *top_labels = malloc((size_t)k_neighbors * sizeof(int));
+    if (!top_scores || !top_labels) {
+        free(top_scores);
+        free(top_labels);
+        return -1;
+    }
+
+    int top_count = 0;
+    for (int i = 0; i < num_fights; i++) {
+        if (fights[i].label < 0) {
+            continue;
+        }
+        if (strcmp(fights[i].weight_class, weight_class) != 0) {
+            continue;
+        }
+
+        double hf[PROFILE_FEAT_COUNT] = {0};
+        compute_profile_features(&fights[i], hf);
+
+        long double dist2 = 0.0L;
+        for (int j = 0; j < PROFILE_FEAT_COUNT; j++) {
+            double scale = model->feat_std[j];
+            if (fabsl(scale) < 1e-8L) {
+                scale = 1.0;
+            }
+            long double diff = (long double)((qf[j] - hf[j]) / scale);
+            dist2 += diff * diff;
+        }
+
+        long double score = 1.0L / (1.0L + dist2);
+        if (top_count < k_neighbors) {
+            top_scores[top_count] = score;
+            top_labels[top_count] = fights[i].label;
+            top_count++;
+        } else {
+            int min_idx = 0;
+            for (int m = 1; m < k_neighbors; m++) {
+                if (top_scores[m] < top_scores[min_idx]) {
+                    min_idx = m;
+                }
+            }
+            if (score > top_scores[min_idx]) {
+                top_scores[min_idx] = score;
+                top_labels[min_idx] = fights[i].label;
+            }
+        }
+    }
+
+    if (top_count == 0) {
+        free(top_scores);
+        free(top_labels);
+        return -1;
+    }
+
+    long double weighted_sum = 0.0L;
+    long double score_sum = 0.0L;
+    for (int i = 0; i < top_count; i++) {
+        weighted_sum += top_scores[i] * (long double)top_labels[i];
+        score_sum += top_scores[i];
+    }
+
+    if (score_sum <= 0.0L) {
+        free(top_scores);
+        free(top_labels);
+        return -1;
+    }
+
+    *out_prob = weighted_sum / score_sum;
+    *out_neighbors = top_count;
+
+    free(top_scores);
+    free(top_labels);
+    return 0;
+}
+
+static long double blend_with_similar_profiles(long double model_prob,
+                                               long double similar_prob,
+                                               int similar_count,
+                                               long double *out_blend_weight) {
+    long double blend_weight;
+    if (similar_count >= 30) {
+        blend_weight = 0.30L;
+    } else if (similar_count >= 15) {
+        blend_weight = 0.22L;
+    } else if (similar_count >= 5) {
+        blend_weight = 0.14L;
+    } else {
+        blend_weight = 0.08L;
+    }
+
+    if (out_blend_weight) {
+        *out_blend_weight = blend_weight;
+    }
+
+    return (1.0L - blend_weight) * model_prob + blend_weight * similar_prob;
+}
+
 /* Compute normalization statistics (mean and std dev) */
 static void compute_normalization(double (*raw)[INPUT_SIZE], int count, Model *m) {
     double sum[INPUT_SIZE] = {0};
@@ -1575,6 +1712,14 @@ void analyze_matchup(UFCFight *fights, int num_fights) {
     forward(&model, normalized);
 
     long double p_a = model.output[0];
+    long double p_a_raw = p_a;
+    long double p_a_similar = 0.0L;
+    long double similar_blend_weight = 0.0L;
+    int similar_neighbors = 0;
+    if (estimate_similar_fights_probability(&query, fights, num_fights, weight_class, &model, 50,
+                                            &p_a_similar, &similar_neighbors) == 0) {
+        p_a = blend_with_similar_profiles(p_a, p_a_similar, similar_neighbors, &similar_blend_weight);
+    }
     long double p_b = 1.0L - p_a;
 
     print_side_by_side_stats(&query);
@@ -1611,6 +1756,12 @@ void analyze_matchup(UFCFight *fights, int num_fights) {
 
     printf("\n--- Model Prediction ---\n");
     printf("Weight class : %s\n", weight_class);
+    if (similar_neighbors > 0) {
+        printf("Raw model P(%s wins) : %.2Lf%%\n", fighter_a, p_a_raw * 100.0L);
+        printf("Similar-fight P(%s wins) : %.2Lf%% (%d neighbors)\n",
+               fighter_a, p_a_similar * 100.0L, similar_neighbors);
+        printf("Blend weight on similar-fight signal : %.0Lf%%\n", similar_blend_weight * 100.0L);
+    }
     printf("P(%s wins) : %.2Lf%%\n", fighter_a, p_a * 100.0L);
     printf("P(%s wins) : %.2Lf%%\n", fighter_b, p_b * 100.0L);
 
@@ -1900,11 +2051,25 @@ void predict_interactive(Model *m, UFCFight *fights, int num_fights, int future_
         if (future_mode) {
             prob_f1_wins = temperature_scale_probability(prob_f1_wins, 4.0L);
         }
+
+        long double similar_prob_f1 = 0.0L;
+        long double similar_blend_weight = 0.0L;
+        int similar_neighbors = 0;
+        if (estimate_similar_fights_probability(&fight, fights, num_fights, fight.weight_class, &active_model, 50,
+                                                &similar_prob_f1, &similar_neighbors) == 0) {
+            prob_f1_wins = blend_with_similar_profiles(prob_f1_wins, similar_prob_f1, similar_neighbors,
+                                                       &similar_blend_weight);
+        }
+
         long double prob_f2_wins = 1.0L - prob_f1_wins;
         
         printf("\n--- Prediction ---\n");
         printf("Fighter 1 win probability: %.2Lf%%\n", prob_f1_wins * 100.0L);
         printf("Fighter 2 win probability: %.2Lf%%\n", prob_f2_wins * 100.0L);
+        if (similar_neighbors > 0) {
+            printf("Similar-profile support: %.2Lf%% from %d fights (blend %.0Lf%%)\n",
+                   similar_prob_f1 * 100.0L, similar_neighbors, similar_blend_weight * 100.0L);
+        }
         printf("Prior win-rate delta: %.3f\n", features[FEAT_WIN_RATE_DELTA]);
         printf("Prior total-wins delta: %.0f\n", features[FEAT_TOTAL_WINS_DELTA]);
         if (future_mode) {
