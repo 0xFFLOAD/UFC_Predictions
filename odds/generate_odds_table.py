@@ -167,22 +167,8 @@ def read_existing_rows(path: Path) -> List[MatchupResult]:
     return rows
 
 
-def merge_rows(existing_rows: List[MatchupResult], new_rows: List[MatchupResult]) -> List[MatchupResult]:
-    merged: List[MatchupResult] = list(existing_rows)
-    index_by_key = {
-        (row.weight_class, row.fighter_a, row.fighter_b): idx
-        for idx, row in enumerate(merged)
-    }
-
-    for row in new_rows:
-        key = (row.weight_class, row.fighter_a, row.fighter_b)
-        if key in index_by_key:
-            merged[index_by_key[key]] = row
-        else:
-            index_by_key[key] = len(merged)
-            merged.append(row)
-
-    return merged
+def append_rows(existing_rows: List[MatchupResult], new_rows: List[MatchupResult]) -> List[MatchupResult]:
+    return list(existing_rows) + list(new_rows)
 
 
 def write_output(path: Path, rows: List[MatchupResult]) -> None:
@@ -216,8 +202,8 @@ def main() -> None:
     parser.add_argument(
         "--min-odds",
         type=float,
-        default=75.0,
-        help="Only write rows where at least one fighter has odds >= this value (default: 75).",
+        default=70.0,
+        help="Only write rows where at least one fighter has odds >= this value (default: 70).",
     )
     args = parser.parse_args()
 
@@ -266,13 +252,13 @@ def main() -> None:
         print(f"Processed: {fighter_a} vs {fighter_b} [{weight_class}] -> {result.status}")
 
     existing_rows = read_existing_rows(output_path)
-    merged_rows = merge_rows(existing_rows, results)
+    appended_rows = append_rows(existing_rows, results)
 
-    write_output(output_path, merged_rows)
+    write_output(output_path, appended_rows)
     if skipped_low_odds:
         print(f"Skipped {skipped_low_odds} matchup(s) below min odds threshold.")
     if existing_rows:
-        print(f"Merged {len(results)} new row(s) with {len(existing_rows)} existing row(s).")
+        print(f"Appended {len(results)} new row(s) to {len(existing_rows)} existing row(s).")
     print(f"\nWrote odds table to: {output_path}")
 
 

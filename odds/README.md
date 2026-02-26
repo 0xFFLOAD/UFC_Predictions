@@ -24,7 +24,7 @@ Then enter rows interactively:
 
 Type `q` for weight class when done. The script writes output to `odds/odds.txt`.
 
-By default, rows are only written when at least one fighter has odds `>= 75%`.
+By default, rows are only written when at least one fighter has odds `>= 70%`.
 Rows with missing fighter stats/odds (`N/A`) are not written to the output table.
 
 Optional non-interactive mode:
