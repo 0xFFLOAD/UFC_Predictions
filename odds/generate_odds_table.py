@@ -167,8 +167,8 @@ def main() -> None:
     parser.add_argument(
         "--min-odds",
         type=float,
-        default=80.0,
-        help="Only write rows where at least one fighter has odds >= this value (default: 80).",
+        default=75.0,
+        help="Only write rows where at least one fighter has odds >= this value (default: 75).",
     )
     args = parser.parse_args()
 
