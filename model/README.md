@@ -104,6 +104,8 @@ Fighter 2 win probability: 32.68%
 Predicted winner: Fighter 1
 ```
 
+Prediction odds blend the neural-network output with an empirical signal from historically similar fight profiles (same weight class, nearest stat-delta neighbors) to reduce overconfident extremes.
+
 ### Evaluation
 
 ```bash
