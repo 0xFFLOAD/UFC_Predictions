@@ -49,7 +49,20 @@ def fighter_last_name(full_name: str) -> str:
 def lookup_event_datetime(fighter_a: str, fighter_b: str) -> Tuple[str, str]:
     key = frozenset((fighter_last_name(fighter_a), fighter_last_name(fighter_b)))
     event_date, event_time = SCHEDULE_BY_SURNAME_PAIR.get(key, ("", ""))
-    return event_date, to_military_time(event_time)
+    return normalize_event_date(event_date), to_military_time(event_time)
+
+
+def normalize_event_date(value: str) -> str:
+    if not value:
+        return ""
+
+    match = re.match(r"^\s*([A-Za-z]{3})\s+(\d{1,2})\s*$", value)
+    if not match:
+        return value
+
+    month = match.group(1).title()
+    day = int(match.group(2))
+    return f"{month} {day:02d}"
 
 
 def to_military_time(time_12h: str) -> str:
