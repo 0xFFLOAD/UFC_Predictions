@@ -3,4 +3,3 @@ Generated: 2026-02-26 10:38:23
 
 Weight Class | Fighter A  | Fighter B     | A Odds | B Odds | Status
 -------------+------------+---------------+--------+--------+-------
-Flyweight    | Joshua Van | Tatsuro Taira | 20.17% | 79.83% | ok    

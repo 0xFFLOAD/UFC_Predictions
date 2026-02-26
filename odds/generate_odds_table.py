@@ -136,6 +136,55 @@ def format_table(rows: Iterable[MatchupResult]) -> str:
     return "\n".join(lines)
 
 
+def read_existing_rows(path: Path) -> List[MatchupResult]:
+    if not path.exists():
+        return []
+
+    rows: List[MatchupResult] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if "|" not in line:
+            continue
+        if line.strip().startswith("Weight Class"):
+            continue
+        if set(line.replace("|", "").replace("-", "").replace("+", "").strip()) == set():
+            continue
+
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) != 6:
+            continue
+
+        rows.append(
+            MatchupResult(
+                weight_class=parts[0],
+                fighter_a=parts[1],
+                fighter_b=parts[2],
+                a_odds=parts[3],
+                b_odds=parts[4],
+                status=parts[5],
+            )
+        )
+
+    return rows
+
+
+def merge_rows(existing_rows: List[MatchupResult], new_rows: List[MatchupResult]) -> List[MatchupResult]:
+    merged: List[MatchupResult] = list(existing_rows)
+    index_by_key = {
+        (row.weight_class, row.fighter_a, row.fighter_b): idx
+        for idx, row in enumerate(merged)
+    }
+
+    for row in new_rows:
+        key = (row.weight_class, row.fighter_a, row.fighter_b)
+        if key in index_by_key:
+            merged[index_by_key[key]] = row
+        else:
+            index_by_key[key] = len(merged)
+            merged.append(row)
+
+    return merged
+
+
 def write_output(path: Path, rows: List[MatchupResult]) -> None:
     title = "UFC Odds Table"
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -216,9 +265,14 @@ def main() -> None:
         results.append(result)
         print(f"Processed: {fighter_a} vs {fighter_b} [{weight_class}] -> {result.status}")
 
-    write_output(output_path, results)
+    existing_rows = read_existing_rows(output_path)
+    merged_rows = merge_rows(existing_rows, results)
+
+    write_output(output_path, merged_rows)
     if skipped_low_odds:
         print(f"Skipped {skipped_low_odds} matchup(s) below min odds threshold.")
+    if existing_rows:
+        print(f"Merged {len(results)} new row(s) with {len(existing_rows)} existing row(s).")
     print(f"\nWrote odds table to: {output_path}")
 
 
