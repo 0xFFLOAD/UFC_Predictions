@@ -13,12 +13,42 @@ from typing import Iterable, List, Sequence, Tuple
 
 @dataclass
 class MatchupResult:
+    event_date: str
+    event_time: str
     weight_class: str
     fighter_a: str
     fighter_b: str
     a_odds: str
     b_odds: str
     status: str
+
+
+SCHEDULE_BY_SURNAME_PAIR = {
+    frozenset(("holloway", "oliveira")): ("Mar 8", "12:00 AM"),
+    frozenset(("emmett", "vallejos")): ("Mar 14", "11:00 PM"),
+    frozenset(("evloev", "murphy")): ("Mar 21", "7:00 PM"),
+    frozenset(("adesanya", "pyfer")): ("Mar 29", "12:00 AM"),
+    frozenset(("moicano", "duncan")): ("Apr 5", "12:00 AM"),
+    frozenset(("van", "taira")): ("Apr 12", "1:00 AM"),
+    frozenset(("burns", "malott")): ("Apr 19", "12:00 AM"),
+    frozenset(("brady", "buckley")): ("Apr 26", "1:00 AM"),
+}
+
+
+def normalize_name_token(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def fighter_last_name(full_name: str) -> str:
+    parts = [part for part in re.split(r"\s+", full_name.strip()) if part]
+    if not parts:
+        return ""
+    return normalize_name_token(parts[-1])
+
+
+def lookup_event_datetime(fighter_a: str, fighter_b: str) -> Tuple[str, str]:
+    key = frozenset((fighter_last_name(fighter_a), fighter_last_name(fighter_b)))
+    return SCHEDULE_BY_SURNAME_PAIR.get(key, ("", ""))
 
 
 def parse_percent(value: str) -> float | None:
@@ -66,8 +96,9 @@ def prompt_pairs() -> List[Tuple[str, str, str]]:
 
 
 def run_matchup(model_dir: Path, weight_class: str, fighter_a: str, fighter_b: str) -> MatchupResult:
+    event_date, event_time = lookup_event_datetime(fighter_a, fighter_b)
     if not (model_dir / "ufc_nn").exists():
-        return MatchupResult(weight_class, fighter_a, fighter_b, "N/A", "N/A", "model executable not found")
+        return MatchupResult(event_date, event_time, weight_class, fighter_a, fighter_b, "N/A", "N/A", "model executable not found")
 
     proc = subprocess.run(
         ["./ufc_nn", "--load", "--matchup"],
@@ -81,11 +112,11 @@ def run_matchup(model_dir: Path, weight_class: str, fighter_a: str, fighter_b: s
     output = f"{proc.stdout}\n{proc.stderr}" if proc.stderr else proc.stdout
 
     if "Class model not found" in output:
-        return MatchupResult(weight_class, fighter_a, fighter_b, "N/A", "N/A", "class model missing")
+        return MatchupResult(event_date, event_time, weight_class, fighter_a, fighter_b, "N/A", "N/A", "class model missing")
     if "No stats found for fighter A" in output or "No stats found for fighter B" in output:
-        return MatchupResult(weight_class, fighter_a, fighter_b, "N/A", "N/A", "fighter stats missing")
+        return MatchupResult(event_date, event_time, weight_class, fighter_a, fighter_b, "N/A", "N/A", "fighter stats missing")
     if "Invalid weight class input" in output:
-        return MatchupResult(weight_class, fighter_a, fighter_b, "N/A", "N/A", "invalid weight class")
+        return MatchupResult(event_date, event_time, weight_class, fighter_a, fighter_b, "N/A", "N/A", "invalid weight class")
 
     probs = re.findall(r"^P\((.+?) wins\)\s*:\s*([0-9]+(?:\.[0-9]+)?)%$", output, flags=re.MULTILINE)
 
@@ -93,24 +124,26 @@ def run_matchup(model_dir: Path, weight_class: str, fighter_a: str, fighter_b: s
         status = "prediction unavailable"
         if proc.returncode != 0:
             status = f"model exit code {proc.returncode}"
-        return MatchupResult(weight_class, fighter_a, fighter_b, "N/A", "N/A", status)
+        return MatchupResult(event_date, event_time, weight_class, fighter_a, fighter_b, "N/A", "N/A", status)
 
     parsed = {name.strip(): value.strip() + "%" for name, value in probs}
     a_odds = parsed.get(fighter_a, "N/A")
     b_odds = parsed.get(fighter_b, "N/A")
 
     if a_odds == "N/A" or b_odds == "N/A":
-        return MatchupResult(weight_class, fighter_a, fighter_b, a_odds, b_odds, "name mismatch in model output")
+        return MatchupResult(event_date, event_time, weight_class, fighter_a, fighter_b, a_odds, b_odds, "name mismatch in model output")
 
-    return MatchupResult(weight_class, fighter_a, fighter_b, a_odds, b_odds, "ok")
+    return MatchupResult(event_date, event_time, weight_class, fighter_a, fighter_b, a_odds, b_odds, "ok")
 
 
 def format_table(rows: Iterable[MatchupResult]) -> str:
     rows_list = list(rows)
-    headers = ["Weight Class", "Fighter A", "Fighter B", "A Odds", "B Odds", "Status"]
+    headers = ["Date", "Time", "Weight Class", "Fighter A", "Fighter B", "A Odds", "B Odds", "Status"]
 
     data_rows = [
         [
+            row.event_date,
+            row.event_time,
             row.weight_class,
             row.fighter_a,
             row.fighter_b,
@@ -150,19 +183,34 @@ def read_existing_rows(path: Path) -> List[MatchupResult]:
             continue
 
         parts = [part.strip() for part in line.split("|")]
-        if len(parts) != 6:
+        if len(parts) == 8:
+            rows.append(
+                MatchupResult(
+                    event_date=parts[0],
+                    event_time=parts[1],
+                    weight_class=parts[2],
+                    fighter_a=parts[3],
+                    fighter_b=parts[4],
+                    a_odds=parts[5],
+                    b_odds=parts[6],
+                    status=parts[7],
+                )
+            )
             continue
 
-        rows.append(
-            MatchupResult(
-                weight_class=parts[0],
-                fighter_a=parts[1],
-                fighter_b=parts[2],
-                a_odds=parts[3],
-                b_odds=parts[4],
-                status=parts[5],
+        if len(parts) == 6:
+            rows.append(
+                MatchupResult(
+                    event_date="",
+                    event_time="",
+                    weight_class=parts[0],
+                    fighter_a=parts[1],
+                    fighter_b=parts[2],
+                    a_odds=parts[3],
+                    b_odds=parts[4],
+                    status=parts[5],
+                )
             )
-        )
 
     return rows
 
