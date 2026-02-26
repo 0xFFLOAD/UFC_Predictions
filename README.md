@@ -14,8 +14,9 @@ Starter workspace for:
 - `css/` — CSS starter stylesheet
 - `python/` — Python starter script
 - `c99/` — C99 starter + `Makefile`
-- `data/` — **Real UFC datasets** (30 years of fights, fighter stats, betting odds)
+- `data/` — **UFC datasets and data utilities**
 - `model/` — **Neural network for UFC winner prediction** (C99, 14 features)
+- `odds/` — Processed betting-odds artifacts and reports
 
 ## Quick Start
 
@@ -51,17 +52,22 @@ make run
 
 ## Data
 
-Real UFC datasets with **32,000+ rows** across 3 files:
+Primary UFC datasets in this workspace:
 
-- `ufc_complete_dataset.csv` — 7,340 fights from 1994-2023 with fighter stats & betting odds
-- `ufc_fight_data.csv` — 17,052 rows of detailed fight statistics (updated weekly)
-- `ufc_fight_data_raw.csv` — 8,526 rows of raw UFC stats data
+- `ufc_complete_dataset.csv` — Core UFC fight dataset used by the model
+- `ufc_complete_dataset.full_backup.csv` — Backup copy of the complete dataset
+- `ufc_fights_full_with_odds.csv` — UFC fights with integrated betting odds
+- `fighter_stats_dict.json` — Fighter stat dictionary built from source data
 
 **Preview the data:**
 ```bash
 cd data
 python3 preview_data.py
 ```
+
+## Odds Reports
+
+- Processed odds report output is stored at `odds/processed_odds_report.txt`.
 
 
 ## Neural Network Model

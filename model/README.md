@@ -153,6 +153,8 @@ model/
 └── ufc_model.bin      # Trained model (generated after training)
 ```
 
+For processed betting-odds report artifacts, see `../odds/README.md`.
+
 ## Technical Notes
 
 ### Feature Engineering Rationale
