@@ -1,0 +1,10 @@
+UFC Odds Table
+Generated: 2026-02-26 10:25:34
+
+Weight Class  | Fighter A      | Fighter B        | A Odds | B Odds  | Status
+--------------+----------------+------------------+--------+---------+-------
+Lightweight   | Max Holloway   | Charles Oliveira | 85.64% | 14.36%  | ok    
+Featherweight | Movsar Evloev  | Lerone Murphy    | 92.75% | 7.25%   | ok    
+Lightweight   | Renato Moicano | Chris Duncan     | 98.85% | 1.15%   | ok    
+Flyweight     | Joshua Van     | Tatsuro Taira    | 0.00%  | 100.00% | ok    
+Welterweight  | Sean Brady     | Joaquin Buckley  | 99.98% | 0.02%   | ok    

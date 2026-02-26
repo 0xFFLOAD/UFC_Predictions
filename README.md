@@ -68,6 +68,11 @@ python3 preview_data.py
 ## Odds Reports
 
 - Processed odds report output is stored at `odds/processed_odds_report.txt`.
+- Generate matchup odds table at `odds/odds.txt` with:
+
+```bash
+make odds-table
+```
 
 
 ## Neural Network Model

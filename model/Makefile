@@ -9,7 +9,7 @@ TARGET = ufc_nn
 SRC = ufc_nn.c
 OBJ = $(SRC:.c=.o)
 
-.PHONY: all clean train predict matchup eval test
+.PHONY: all clean train predict matchup eval test odds-table
 
 all: $(TARGET)
 
@@ -43,6 +43,11 @@ matchup: $(TARGET)
 eval: $(TARGET)
 	@echo "Running model evaluation on chronological holdout..."
 	./$(TARGET) --global --load --eval
+
+# Generate odds table file from matchup inputs
+odds-table:
+	@echo "Generating odds table..."
+	/usr/bin/python3 ../odds/generate_odds_table.py $(ARGS)
 
 # Train and then predict
 train-predict: $(TARGET)
@@ -86,6 +91,9 @@ help:
 	@echo "  ./ufc_nn --load --predict-historical  Predict with direct head-to-head enabled"
 	@echo "  make matchup      Compare model odds vs actual A vs B outcomes"
 	@echo "  make eval         Evaluate global model on holdout split"
+	@echo "  make odds-table   Generate odds/odds.txt (interactive by default)"
+	@echo "                    Optional: make odds-table ARGS='--out ../odds/odds.txt'"
+	@echo "                    Non-interactive example: /usr/bin/python3 ../odds/generate_odds_table.py --pair 'Lightweight|Max Holloway|Charles Oliveira'"
 	@echo "  make train-predict Train then predict"
 	@echo "  make test         Quick test run"
 	@echo "  make clean        Remove built files"
