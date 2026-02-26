@@ -48,7 +48,28 @@ def fighter_last_name(full_name: str) -> str:
 
 def lookup_event_datetime(fighter_a: str, fighter_b: str) -> Tuple[str, str]:
     key = frozenset((fighter_last_name(fighter_a), fighter_last_name(fighter_b)))
-    return SCHEDULE_BY_SURNAME_PAIR.get(key, ("", ""))
+    event_date, event_time = SCHEDULE_BY_SURNAME_PAIR.get(key, ("", ""))
+    return event_date, to_military_time(event_time)
+
+
+def to_military_time(time_12h: str) -> str:
+    if not time_12h:
+        return ""
+
+    match = re.match(r"^\s*(\d{1,2}):(\d{2})\s*([AP]M)\s*$", time_12h, flags=re.IGNORECASE)
+    if not match:
+        return time_12h
+
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    am_pm = match.group(3).upper()
+
+    if am_pm == "AM":
+        hour = 0 if hour == 12 else hour
+    else:
+        hour = hour if hour == 12 else hour + 12
+
+    return f"{hour:02d}:{minute:02d}"
 
 
 def parse_percent(value: str) -> float | None:
@@ -179,10 +200,17 @@ def read_existing_rows(path: Path) -> List[MatchupResult]:
             continue
         if line.strip().startswith("Weight Class"):
             continue
+        if line.strip().startswith("Date") and "Time" in line and "Weight Class" in line:
+            continue
         if set(line.replace("|", "").replace("-", "").replace("+", "").strip()) == set():
             continue
 
         parts = [part.strip() for part in line.split("|")]
+        if parts in [
+            ["Date", "Time", "Weight Class", "Fighter A", "Fighter B", "A Odds", "B Odds", "Status"],
+            ["Weight Class", "Fighter A", "Fighter B", "A Odds", "B Odds", "Status"],
+        ]:
+            continue
         if len(parts) == 8:
             rows.append(
                 MatchupResult(
