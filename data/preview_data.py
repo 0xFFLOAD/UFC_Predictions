@@ -1,143 +1,60 @@
 #!/usr/bin/env python3
-"""
-UFC Data Preview Script
-Analyze and summarize the downloaded UFC datasets
-"""
 
 import csv
-import os
-from collections import Counter
-from datetime import datetime
-
-# Get the directory where this script is located
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+from pathlib import Path
 
 
-def preview_csv(filename, max_rows=5):
-    """Preview first few rows and basic stats of a CSV file"""
-    print(f"\n{'='*80}")
-    print(f"Dataset: {filename}")
-    print(f"{'='*80}")
-    
-    # Construct full path relative to script location
-    filepath = os.path.join(SCRIPT_DIR, filename)
-    
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-            
-            if not rows:
-                print("⚠️  Empty dataset")
-                return
-            
-            total_rows = len(rows)
-            columns = list(rows[0].keys())
-            
-            print(f"\n📊 Summary:")
-            print(f"   • Total rows: {total_rows:,}")
-            print(f"   • Total columns: {len(columns)}")
-            
-            # Preview columns
-            print(f"\n📋 Columns ({len(columns)}):")
-            for i, col in enumerate(columns[:20], 1):
-                print(f"   {i:2d}. {col}")
-            if len(columns) > 20:
-                print(f"   ... and {len(columns) - 20} more columns")
-            
-            # Preview data
-            print(f"\n🔍 First {min(max_rows, total_rows)} rows:")
-            for i, row in enumerate(rows[:max_rows], 1):
-                print(f"\n   Row {i}:")
-                for key, value in list(row.items())[:10]:
-                    display_val = value[:60] if len(value) > 60 else value
-                    print(f"      {key}: {display_val}")
-                if len(row) > 10:
-                    print(f"      ... and {len(row) - 10} more fields")
-            
-            return rows, columns
-            
-    except Exception as e:
-        print(f"❌ Error reading {filename}: {e}")
-        return None, None
+DATASET = Path(__file__).with_name("TSLA_Stock_Dataset_2012_2026.csv")
 
 
-def analyze_complete_dataset(rows):
-    """Analyze the comprehensive UFC dataset"""
-    if not rows:
+def to_float(value: str) -> float:
+    return float((value or "0").replace(",", "").strip())
+
+
+def load_rows():
+    with DATASET.open("r", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def main() -> None:
+    print("=" * 72)
+    print("TSLA DATA PREVIEW")
+    print("=" * 72)
+
+    if not DATASET.exists():
+        print(f"Dataset not found: {DATASET}")
         return
-    
-    print(f"\n{'='*80}")
-    print("Deep Analysis: ufc_complete_dataset.csv")
-    print(f"{'='*80}")
-    
-    # Date range
-    dates = [row['event_date'] for row in rows if row.get('event_date')]
-    if dates:
-        print(f"\n📅 Date Range: {min(dates)} to {max(dates)}")
-    
-    # Weight classes
-    weight_classes = Counter(row['weight_class'] for row in rows if row.get('weight_class'))
-    print(f"\n⚖️  Weight Classes (top 10):")
-    for wc, count in weight_classes.most_common(10):
-        print(f"   • {wc}: {count:,} fights")
-    
-    # Outcomes
-    outcomes = Counter(row['outcome'] for row in rows if row.get('outcome'))
-    print(f"\n🎯 Outcomes:")
-    for outcome, count in outcomes.most_common(5):
-        print(f"   • {outcome}: {count:,}")
-    
-    # Methods
-    methods = Counter(row['method'] for row in rows if row.get('method'))
-    print(f"\n🥊 Victory Methods (top 10):")
-    for method, count in methods.most_common(10):
-        print(f"   • {method}: {count:,}")
-    
-    # Betting data availability
-    with_odds = sum(1 for row in rows if row.get('favourite_odds') and row['favourite_odds'].strip())
-    print(f"\n💰 Betting Data:")
-    print(f"   • Fights with odds: {with_odds:,} ({with_odds/len(rows)*100:.1f}%)")
-    print(f"   • Fights without odds: {len(rows)-with_odds:,}")
-    
-    # Unique fighters
-    fighters = set()
-    for row in rows:
-        if row.get('fighter1'):
-            fighters.add(row['fighter1'])
-        if row.get('fighter2'):
-            fighters.add(row['fighter2'])
-    print(f"\n👤 Unique Fighters: {len(fighters):,}")
 
+    rows = load_rows()
+    if not rows:
+        print("Dataset is empty")
+        return
 
-def main():
-    print("\n" + "="*80)
-    print("🥊 UFC DATA PREVIEW (Class-Filtered)")
-    print("="*80)
-    
-    datasets = [
-        'ufc_complete_dataset.csv'
-    ]
-    
-    all_data = {}
-    
-    for dataset in datasets:
-        rows, cols = preview_csv(dataset, max_rows=2)
-        if rows:
-            all_data[dataset] = (rows, cols)
-    
-    # Deep analysis for complete dataset
-    if 'ufc_complete_dataset.csv' in all_data:
-        analyze_complete_dataset(all_data['ufc_complete_dataset.csv'][0])
-    
-    print(f"\n{'='*80}")
-    print("✅ Data preview complete!")
-    print("="*80)
-    print("\n💡 Next steps:")
-    print("   • Load data with pandas: df = pd.read_csv('data/ufc_complete_dataset.csv')")
-    print("   • Check data/README.md for detailed field descriptions")
-    print("   • Explore fighter statistics, betting trends, and match outcomes")
-    print()
+    closes = [to_float(r["Close"]) for r in rows if r.get("Close")]
+    volumes = [to_float(r["Volume"]) for r in rows if r.get("Volume")]
+
+    returns = []
+    for i in range(1, len(closes)):
+        prev = closes[i - 1]
+        curr = closes[i]
+        if prev > 0:
+            returns.append((curr - prev) / prev)
+
+    print(f"Rows: {len(rows):,}")
+    print(f"Date range: {rows[0]['Date']} -> {rows[-1]['Date']}")
+    print(f"Latest close: {closes[-1]:.2f}")
+    print(f"Average close: {sum(closes) / len(closes):.2f}")
+    print(f"Average volume: {sum(volumes) / len(volumes):,.0f}")
+    if returns:
+        avg_ret = sum(returns) / len(returns)
+        print(f"Average daily return: {avg_ret * 100:.3f}%")
+
+    print("\nSample rows:")
+    for row in rows[-3:]:
+        print(
+            f"  {row['Date']}  O:{to_float(row['Open']):.2f}  H:{to_float(row['High']):.2f}  "
+            f"L:{to_float(row['Low']):.2f}  C:{to_float(row['Close']):.2f}  V:{to_float(row['Volume']):,.0f}"
+        )
 
 
 if __name__ == "__main__":
