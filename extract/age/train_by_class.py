@@ -71,9 +71,12 @@ def main():
             df = df[df['weight_class'] == cls]
         return df
 
-    # gather all classes by inspecting the first source
-    first = load_for_class(source_files[0], None) if source_files else pd.DataFrame()
-    if first.empty:
+    # gather all classes by inspecting the first source (no filtering)
+    if not source_files:
+        print('no data sources found, exiting')
+        return
+    first = pd.read_csv(source_files[0], sep='\t')
+    if first.empty or 'weight_class' not in first.columns:
         print('no data sources found, exiting')
         return
     classes = first['weight_class'].dropna().unique()
