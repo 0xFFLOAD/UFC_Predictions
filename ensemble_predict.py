@@ -30,14 +30,14 @@ for other in dfs[1:]:
 if 'weight_diff' in df.columns and 'weight_delta' not in df.columns:
     df=df.rename(columns={'weight_diff':'weight_delta'})
 
-# features list (hard-coded for clarity)
-features=['age_diff','height_diff','reach_diff','weight_delta',
-          'td_def_total_diff','td_avg_diff','td_acc_total_diff',
-          'striking_advantage','prev_wins_against_opp','grappling_score']
-
-# drop rows missing any feature
-clean=df.dropna(subset=features).reset_index(drop=True)
+# compute feature list automatically (all non-identifier columns)
+base = {'r_fighter','b_fighter','winner','weight_class'}
+# after merging we may still have r_age/b_age and diff columns; include them
+features = [c for c in df.columns if c not in base]
+# drop rows missing any of the chosen features
+clean = df.dropna(subset=features).reset_index(drop=True)
 print(f'merged {len(df)} rows, {len(clean)} after dropping missing features')
+print('using features:', features)
 
 # load per-class ensembles
 import re
