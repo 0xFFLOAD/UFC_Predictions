@@ -91,6 +91,13 @@ def main():
         # explicit feature tables -> merge them per class
         source_files = args.data
 
+        # helper used by get_class_df below
+        def load_for_class(path, cls):
+            df = pd.read_csv(path, sep='\t')
+            if 'weight_class' in df.columns:
+                df = df[df['weight_class'] == cls]
+            return df
+
         def get_class_df(cls):
             dfs = [load_for_class(path, cls) for path in source_files]
             df = dfs[0]
