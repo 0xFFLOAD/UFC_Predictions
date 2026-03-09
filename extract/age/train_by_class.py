@@ -57,29 +57,39 @@ def main():
                         help='Retrain even if checkpoint exists')
     args = parser.parse_args()
 
-    # determine source files for each class
+    # determine how we will obtain data for a given class
     if args.data:
+        # explicit feature tables -> merge them per class
         source_files = args.data
+
+        def get_class_df(cls):
+            dfs = [load_for_class(path, cls) for path in source_files]
+            df = dfs[0]
+            for other in dfs[1:]:
+                on_cols = ['r_fighter', 'b_fighter', 'winner']
+                if 'weight_class' in df.columns and 'weight_class' in other.columns:
+                    on_cols.append('weight_class')
+                df = df.merge(other, on=on_cols, how='inner')
+            return df
+
+        # get classes from first source without filtering
+        first = pd.read_csv(source_files[0], sep='\t')
+        if first.empty or 'weight_class' not in first.columns:
+            print('no data sources found, exiting')
+            return
+        classes = first['weight_class'].dropna().unique()
     else:
+        # no explicit sources -> use per-class TSVs directly
         pattern = os.path.join(os.path.dirname(__file__), 'age_*.tsv')
         source_files = [f for f in glob.glob(pattern) if os.path.basename(f) != 'age.tsv']
 
-    # helper to read and optionally filter to class
-    def load_for_class(path, cls):
-        df = pd.read_csv(path, sep='\t')
-        if 'weight_class' in df.columns:
-            df = df[df['weight_class'] == cls]
-        return df
+        def get_class_df(cls):
+            path = os.path.join(os.path.dirname(__file__), f'age_{cls}.tsv')
+            return pd.read_csv(path, sep='\t')
 
-    # gather all classes by inspecting the first source (no filtering)
-    if not source_files:
-        print('no data sources found, exiting')
-        return
-    first = pd.read_csv(source_files[0], sep='\t')
-    if first.empty or 'weight_class' not in first.columns:
-        print('no data sources found, exiting')
-        return
-    classes = first['weight_class'].dropna().unique()
+        # classes are derived from the filenames themselves
+        classes = [os.path.splitext(os.path.basename(f))[0].replace('age_', '')
+                   for f in source_files]
 
     for cls in classes:
         # determine file basenames for this class depending on invert/double
@@ -100,14 +110,7 @@ def main():
                 print(f"Skipping {cls} ({'loss' if invert_flag else 'win'}), checkpoint already exists")
                 return
             print(f"Preparing data for class {cls} (invert={invert_flag})")
-            # merge all sources for this class horizontally
-            dfs = [load_for_class(path, cls) for path in source_files]
-            df = dfs[0]
-            for other in dfs[1:]:
-                on_cols = ['r_fighter', 'b_fighter', 'winner']
-                if 'weight_class' in df.columns and 'weight_class' in other.columns:
-                    on_cols.append('weight_class')
-                df = df.merge(other, on=on_cols, how='inner')
+            df = get_class_df(cls)
 
             df_clean = df.dropna(subset=args.features)
             print(f"Training class {cls} ({len(df_clean)} rows after merge)")
