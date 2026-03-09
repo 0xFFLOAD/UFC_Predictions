@@ -11,17 +11,17 @@ Output Layer:   1 neuron (sigmoid) - P(fighter1 wins)
 The model uses **25 carefully engineered features** representing differences between fighters:
 
 ### Basic Physical Deltas
-1. **Height Delta** - Height difference (cm)
-2. **Reach Delta** - Reach difference (cm)
-3. a. **Age Delta** - Age difference (months)
-4. b. **Age** - Age (months)
-5. a. **Weight Delta** - Weight difference (kg)
-6. b. **Weight** - Weight (kg)
+1.  **Height Delta** - Height difference (cm)
+2.  **Reach Delta** - Reach difference (cm)
+3.  **Age Delta** - Age difference (months)
+4.  **Age** - Age (months)
+5.  **Weight Delta** - Weight difference (kg)
+6.  **Weight** - Weight (kg)
 
 ### Striking Statistics Deltas
-7. **Sig Strikes PM Delta** - Significant strikes landed per minute
-8. **Sig Strike Accuracy Delta** - Strike accuracy percentage
-9. **Sig Strike Absorbed Delta** - Strikes absorbed per minute
+7.  **Sig Strikes PM Delta** - Significant strikes landed per minute
+8.  **Sig Strike Accuracy Delta** - Strike accuracy percentage
+9.  **Sig Strike Absorbed Delta** - Strikes absorbed per minute
 10. **Sig Strike Defense Delta** - Strike defense percentage
 
 ### Grappling Statistics Deltas
@@ -35,18 +35,17 @@ The model uses **25 carefully engineered features** representing differences bet
 16. **Grappling Score** - Composite grappling effectiveness
 
 ### Miscellaneous
-17. a. **Unprepared for Fight** - Short-notice fight (binary)
-18. b. **Win/Loss Unprepared for Fight** - Short-notice fight (binary)
+17. **Unprepared for Fight** - Short-notice fight (binary)
+18. **Win/Loss Unprepared for Fight** - Short-notice fight (binary)
 19. **Total Injuries in Career** - Previous injuries
 20. **Total Consecutive Wins** - Win streak
-21. a. **Total Special Win count** - Reason for win (opp )
-22. b. **Total Special Loss count** - Reason for loss (self sick, self injured)
+21. **Total Special Win count** - Reason for win (opp )
+22. **Total Special Loss count** - Reason for loss (self sick, self injured)
 23. **Total count KO taken** - Total count of KO taken
 24. **Total count KO given** - Total count of KO given
 25. **Prev Wins Against Opp** - Previous fights against opponent
 
 ## Dataset
-
 
 ## Building
 make              # Build the model
