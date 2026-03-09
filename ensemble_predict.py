@@ -90,8 +90,19 @@ for idx,row in clean.iterrows():
             print(f"    skipping incompatible checkpoint {model_path}: {e}")
             continue
         model.eval()
+        # adjust xnorm if model expects fewer features than we have
+        x_input = xnorm
+        if x_input.shape[1] != in_dim:
+            # attempt to drop grappling_score if it's causing mismatch
+            if x_input.shape[1] - in_dim == 1 and 'grappling_score' in features:
+                idx = features.index('grappling_score')
+                print(f"    dropping grappling_score column for model {model_path}")
+                x_input = torch.cat([x_input[:, :idx], x_input[:, idx+1:]], dim=1)
+            else:
+                print(f"    dim mismatch skipping {model_path} (have {x_input.shape[1]} expected {in_dim})")
+                continue
         with torch.no_grad():
-            logits_sum += torch.sigmoid(model(xnorm))
+            logits_sum += torch.sigmoid(model(x_input))
         loaded += 1
     if loaded == 0:
         continue
