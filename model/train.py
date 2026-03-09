@@ -62,6 +62,8 @@ def main():
     parser.add_argument('--ensemble', type=int, default=1,
                         help='Train this many models and ensemble their outputs')
     args = parser.parse_args()
+    # debug: display key hyperparameters
+    print(f"parsed args.hidden1={args.hidden1}, hidden2={args.hidden2}, dropout={args.dropout}")
 
     # read all supplied files
     dfs = [pd.read_csv(f, sep='\t') for f in args.data]
@@ -167,7 +169,14 @@ def main():
 
     # perform training runs (possibly ensemble)
     def run_seq(label_invert, base_prefix):
-        import torch
+        import torch, glob, os
+        # remove any old models matching this prefix
+        pattern = base_prefix + "*" + ("_loss.pt" if label_invert else "_win.pt")
+        for old in glob.glob(pattern):
+            try:
+                os.remove(old)
+            except OSError:
+                pass
         paths = []
         for i in range(args.ensemble):
             seed = None if args.ensemble == 1 else i
@@ -197,16 +206,25 @@ def main():
             if invert_flag:
                 ys = 1 - ys
             logits_sum = None
+            valid = 0
             for p in paths:
                 m = UFCPredictor(input_dim=len(args.features),
                                   hidden1=args.hidden1,
                                   hidden2=args.hidden2,
                                   dropout=args.dropout)
-                m.load_state_dict(torch.load(p))
+                try:
+                    m.load_state_dict(torch.load(p))
+                except Exception as e:
+                    print(f'warning: skipping ensemble member {p} ({e})')
+                    continue
                 m.eval()
                 with torch.no_grad():
                     out = torch.sigmoid(m(xs))
                 logits_sum = out if logits_sum is None else logits_sum + out
+                valid += 1
+            if valid == 0:
+                raise RuntimeError('no valid models in ensemble')
+            logits_sum = logits_sum / valid
             avg = logits_sum / len(paths)
             pred_labels = (avg > 0.5).float()
             acc = (pred_labels == ys).float().mean().item()
