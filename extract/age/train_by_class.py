@@ -43,26 +43,50 @@ def main():
                         help='Run LR finder before each class')
     parser.add_argument('--features', nargs='+', default=['r_age', 'b_age'],
                         help='Feature columns to use')
+    parser.add_argument('--data', nargs='+',
+                        help='TSV files to merge for each class; if omitted will use age_*.tsv in the current directory')
     parser.add_argument('--force', action='store_true',
                         help='Retrain even if checkpoint exists')
     args = parser.parse_args()
 
-    pattern = os.path.join(os.path.dirname(__file__), 'age_*.tsv')
-    files = glob.glob(pattern)
-    files = [f for f in files if os.path.basename(f) != 'age.tsv']
+    # determine source files for each class
+    if args.data:
+        source_files = args.data
+    else:
+        pattern = os.path.join(os.path.dirname(__file__), 'age_*.tsv')
+        source_files = [f for f in glob.glob(pattern) if os.path.basename(f) != 'age.tsv']
 
-    for path in files:
-        cls = os.path.splitext(os.path.basename(path))[0].replace('age_', '')
+    # helper to read and optionally filter to class
+    def load_for_class(path, cls):
+        df = pd.read_csv(path, sep='\t')
+        if 'weight_class' in df.columns:
+            df = df[df['weight_class'] == cls]
+        return df
+
+    # gather all classes by inspecting the first source
+    first = load_for_class(source_files[0], None) if source_files else pd.DataFrame()
+    if first.empty:
+        print('no data sources found, exiting')
+        return
+    classes = first['weight_class'].dropna().unique()
+
+    for cls in classes:
         chk = os.path.join(CHECKPOINT_DIR, f'{cls}.pt')
         if os.path.exists(chk) and not args.force:
             print(f"Skipping {cls}, checkpoint already exists")
             continue
 
-        df = pd.read_csv(path, sep='\t')
-        # drop rows with missing features
+        # merge all sources for this class horizontally
+        dfs = [load_for_class(path, cls) for path in source_files]
+        df = dfs[0]
+        for other in dfs[1:]:
+            on_cols = ['r_fighter', 'b_fighter', 'winner']
+            if 'weight_class' in df.columns and 'weight_class' in other.columns:
+                on_cols.append('weight_class')
+            df = df.merge(other, on=on_cols, how='inner')
+
         df_clean = df.dropna(subset=args.features)
-        # even a single row will be used; log size
-        print(f"Training class {cls} from {path} ({len(df_clean)} rows)")
+        print(f"Training class {cls} ({len(df_clean)} rows after merge)")
         if len(df_clean) == 0:
             print(f"  no data after dropping NaNs, skipping {cls}")
             continue

@@ -218,6 +218,17 @@ python model/train.py --per-class --data extract/age/age.tsv \
     --features r_age b_age --epochs 50 --batch 32
 ```
 
+If you supply multiple data files the same merge rules described above
+are used before the per-class split.  For instance, to train each
+weight class on both absolute age and age‑difference:
+
+```bash
+python model/train.py --per-class \
+    --data extract/age/age.tsv extract/age_delta/age_delta.tsv \
+    --features r_age b_age age_diff \
+    --epochs 50 --batch 32
+```
+
 This will print a loss for each weight class and a summary at the end.
 #### Programmatic use
 You can also import the classes directly:
