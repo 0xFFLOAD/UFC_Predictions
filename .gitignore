@@ -11,3 +11,4 @@ ufc_dataset/urls/fighter_urls.txt
 *.tsv
 *.pt
 *.pyc
+ensemble_out.txt
