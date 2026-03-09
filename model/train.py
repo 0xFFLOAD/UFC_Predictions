@@ -119,7 +119,10 @@ def main():
             for lr in lrs:
                 for batch in batches:
                     for epochs in epochs_list:
-                        model = UFCPredictor(input_dim=len(args.features))
+                        model = UFCPredictor(input_dim=len(args.features),
+                                             hidden1=args.hidden1,
+                                             hidden2=args.hidden2,
+                                             dropout=args.dropout)
                         print(f'-> testing lr={lr}, batch={batch}, epochs={epochs} invert={label_invert}')
                         train_model(model, df, args.features,
                                     epochs=epochs, lr=lr, batch_size=batch,
@@ -152,7 +155,11 @@ def main():
                                                           invert=label_invert)
                 print(f'suggested lr = {best_lr:.6g}')
                 args.lr = best_lr
-            model = UFCPredictor(input_dim=len(args.features))
+            # instantiate with specified architecture (args may have been updated by auto-lr)
+            model = UFCPredictor(input_dim=len(args.features),
+                                 hidden1=args.hidden1,
+                                 hidden2=args.hidden2,
+                                 dropout=args.dropout)
             train_model(model, df, args.features,
                         epochs=args.epochs, lr=args.lr, batch_size=args.batch,
                         invert=label_invert,
@@ -224,9 +231,9 @@ def main():
                 valid += 1
             if valid == 0:
                 raise RuntimeError('no valid models in ensemble')
+            # average only over successful members
             logits_sum = logits_sum / valid
-            avg = logits_sum / len(paths)
-            pred_labels = (avg > 0.5).float()
+            pred_labels = (logits_sum > 0.5).float()
             acc = (pred_labels == ys).float().mean().item()
             return acc
         if win_models:
