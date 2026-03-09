@@ -192,6 +192,7 @@ def main():
                 best = None
                 best_cfg = None
                 import torch
+                best_model = None
                 for lr in lrs:
                     for batch in batches:
                         for epochs in epochs_list:
@@ -227,7 +228,11 @@ def main():
                                             if best is None or loss_val < best:
                                                 best = loss_val
                                                 best_cfg = (lr, batch, epochs, h1, h2, h3, seed)
+                                                best_model = model
                 print(f"BEST configuration for class {cls} (invert={invert_flag}): lr={best_cfg[0]}, batch={best_cfg[1]}, epochs={best_cfg[2]}, hidden1={best_cfg[3]}, hidden2={best_cfg[4]}, hidden3={best_cfg[5]}, seed={best_cfg[6]} -> loss={best:.4f}")
+                if best_model is not None:
+                    torch.save(best_model.state_dict(), chk)
+                    print(f"Saved best checkpoint to {chk}\n")
 
 
         # decide which runs to perform
