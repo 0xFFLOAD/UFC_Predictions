@@ -100,7 +100,11 @@ def main():
                 on_cols.append('weight_class')
             df = df.merge(other, on=on_cols, how='inner')
         model = UFCPredictor(input_dim=len(args.features))
-        model.load_state_dict(torch.load(chk))
+        try:
+            model.load_state_dict(torch.load(chk))
+        except Exception as e:
+            print(f'warning: could not load {chk} ({e}), skipping')
+            continue
         acc, loss = evaluate(model, df, args.features, invert_flag=invert_flag)
         results.append((cls, len(df), acc, loss, invert_flag))
         tag = 'loss' if invert_flag else 'win'

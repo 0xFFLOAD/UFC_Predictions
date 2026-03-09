@@ -177,6 +177,18 @@ python model/train.py \
     --epochs 50 --lr 0.001
 ```
 
+* do the above **and** produce both win/loss models automatically:
+
+```bash
+python model/train.py \
+    --data extract/age/age.tsv extract/age_delta/age_delta.tsv \
+    --features r_age b_age age_diff \
+    --double --epochs 50 --lr 0.001
+```
+
+  the script will save `model/checkpoints/model_win.pt` and
+  `model/checkpoints/model_loss.pt` (or use `--save prefix` to change this).
+
 The training routine automatically converts the `winner` column into a
 binary label (`Red`=1, `Blue`=0) and shuffles data during training.  A
 few additional options help when you want to flip the prediction target
