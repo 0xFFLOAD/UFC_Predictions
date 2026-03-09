@@ -148,8 +148,13 @@ def main():
             print(f"Preparing data for class {cls} (invert={invert_flag})")
             df = get_class_df(cls)
 
-            df_clean = df.dropna(subset=args.features)
-            print(f"Training class {cls} ({len(df_clean)} rows after merge)")
+            # ensure the requested features actually exist in this class frame
+            avail = [f for f in args.features if f in df.columns]
+            if not avail:
+                print(f"  class {cls} has none of features {args.features}, skipping")
+                return
+            df_clean = df.dropna(subset=avail)
+            print(f"Training class {cls} ({len(df_clean)} rows after merge, using {avail})")
             if len(df_clean) == 0:
                 print(f"  no data after dropping NaNs, skipping {cls}")
                 return

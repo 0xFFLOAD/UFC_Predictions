@@ -179,8 +179,11 @@ python model/train.py \
     --epochs 50 --lr 0.001
 ```
 
-The script now also renames `weight_diff` to `weight_delta` internally so
-you can refer to the latter name even though the TSV column uses `weight_diff`.
+The extractor now also emits `weight_class` so that training data can be
+joined on division; this prevents absurd cross‑class pairs (e.g. a lightweight
+and a heavyweight) which used to generate negative deltas like -258kg.  The
+training script will automatically drop `weight_diff` from the feature set and
+make it available as `weight_delta` for convenience.
 
 * train on absolute age and the pre‑computed age delta together:
 
@@ -238,7 +241,11 @@ its loss, taking into account variations in architecture and randomness.
   higher (aim for ≥70 %).
 
 The training routine automatically converts the `winner` column into a
-binary label (`Red`=1, `Blue`=0) and shuffles data during training.  A
+binary label (`Red`=1, `Blue`=0) and shuffles data during training.  Input
+features are z‑score normalized internally; to prevent extreme outliers
+(e.g. erroneous `weight_delta` values exceeding 250kg) from skewing the
+statistics or producing NaNs, values are additionally clipped to roughly
+±10 standard deviations before being sent through the network.  A
 few additional options help when you want to flip the prediction target
 or generate both models in one go:
 
@@ -359,6 +366,11 @@ before each class, or use `--search` together with `--lr-values`,
 a per-class grid sweep.  When `--search` is active the best configuration
 for each weight division is reported (and the corresponding model saved)
 instead of simply training the default hyperparameters.
+
+If a particular class lacks one or more of the requested feature columns
+(e.g. you ask for `weight_delta` but have no weight data for that division)
+the script will skip it gracefully rather than crashing.  It prints which
+features were actually used for each class in the log.
 
 For example, to tune a model that uses every numeric feature across all
 classes you could run from the `extract/age` folder:

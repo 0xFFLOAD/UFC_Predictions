@@ -13,7 +13,12 @@ DATA_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 
 
 def extract():
     df = pd.read_csv(DATA_PATH)
+    # include weight_class so that downstream merges can restrict to
+    # fights in the same division.  without it we were joining fighters
+    # across classes, which produced absurd weight deltas (>250kg).
     base_cols = ['r_fighter', 'b_fighter', 'winner']
+    if 'weight_class' in df.columns:
+        base_cols.append('weight_class')
     cols = ['r_weight', 'b_weight', 'weight_diff']
     existing = [c for c in cols if c in df.columns]
     if not existing:

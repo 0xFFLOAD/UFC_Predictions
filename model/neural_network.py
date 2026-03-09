@@ -32,6 +32,10 @@ class FeatureDataset(Dataset):
         std = arr.std(axis=0, keepdims=True)
         std[std == 0] = 1.0
         normed = (arr - mean) / std
+        # clip extreme values to avoid single outliers (e.g. weight delta)
+        # dominating training; this keeps values within roughly 10 stddevs.
+        import numpy as np
+        normed = np.clip(normed, -10.0, 10.0)
         self.features = torch.tensor(normed, dtype=torch.float32)
         # convert winner to binary: 'Red' -> 1, 'Blue' -> 0 (or adjust)
         labels = (df[label_column] == 'Red').astype(float).values
