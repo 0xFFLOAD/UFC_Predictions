@@ -77,15 +77,19 @@ def main():
     if len(dfs) == 1:
         df = dfs[0]
     else:
-        # start with the first frame and merge each subsequent one
+        # start with the first frame and merge each subsequent one, but
+        # only bring in columns that are not already present to avoid
+        # collisions (e.g. multiple copies of r_age/b_age).
         df = dfs[0]
         for other in dfs[1:]:
-            # determine which columns to merge on; weight_class is
-            # included when present so that per-class splits still work
             on_cols = ['r_fighter', 'b_fighter', 'winner']
             if 'weight_class' in df.columns and 'weight_class' in other.columns:
                 on_cols.append('weight_class')
-            df = df.merge(other, on=on_cols, how='inner')
+            # select new feature columns only
+            new_cols = [c for c in other.columns if c not in df.columns or c in on_cols]
+            if not new_cols:
+                continue
+            df = df.merge(other[new_cols], on=on_cols, how='inner')
 
     def do_train(label_invert: bool, prefix: str = None):
         # build model with provided architecture params
