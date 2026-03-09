@@ -19,14 +19,26 @@ def main():
     parser = argparse.ArgumentParser(description="Train UFC prediction model")
     parser.add_argument('--data', nargs='+', required=True,
                         help='TSV files containing feature columns and identifiers')
-    parser.add_argument('--features', nargs='+', required=True,
+    parser.add_argument('--features', nargs='+',
                         help='List of feature column names to use as inputs')
+    parser.add_argument('--all-features', action='store_true',
+                        help='Use every non-identifier column found in the merged data')
     parser.add_argument('--epochs', type=int, default=20,
                         help='Number of epochs (ignored in search mode)')
     parser.add_argument('--lr', type=float, default=1e-3,
                         help='Learning rate (ignored in search mode)')
     parser.add_argument('--batch', type=int, default=32,
                         help='Batch size (ignored in search mode)')
+    parser.add_argument('--hidden1', type=int, default=64,
+                        help='Size of first hidden layer')
+    parser.add_argument('--hidden2', type=int, default=32,
+                        help='Size of second hidden layer')
+    parser.add_argument('--dropout', type=float, default=0.0,
+                        help='Dropout probability (0 disables)')
+    parser.add_argument('--weight-decay', type=float, default=0.0,
+                        help='L2 regularization strength')
+    parser.add_argument('--patience', type=int,
+                        help='Early stopping patience (epochs)')
     parser.add_argument('--search', action='store_true',
                         help='Perform grid search over hyperparameters')
     parser.add_argument('--lr-values', type=str,
@@ -49,6 +61,15 @@ def main():
 
     # read all supplied files
     dfs = [pd.read_csv(f, sep='\t') for f in args.data]
+    if args.all_features:
+        # compute feature list automatically as every column except
+        # identifiers/winner/weight_class
+        sample = dfs[0]
+        base = {'r_fighter','b_fighter','winner','weight_class'}
+        auto_feats = [c for c in sample.columns if c not in base]
+        args.features = auto_feats
+    if not args.features:
+        parser.error('Must specify --features or --all-features')
     # if multiple files are provided, perform an inner join on the
     # fighter identifiers rather than simply stacking rows.  This lets
     # the caller supply distinct feature tables (e.g. age and age_delta)
@@ -67,6 +88,11 @@ def main():
             df = df.merge(other, on=on_cols, how='inner')
 
     def do_train(label_invert: bool, prefix: str = None):
+        # build model with provided architecture params
+        model = UFCPredictor(input_dim=len(args.features),
+                             hidden1=args.hidden1,
+                             hidden2=args.hidden2,
+                             dropout=args.dropout)
         # helper that either does a single training run or the search mode
         if args.search:
             # build value lists
@@ -87,7 +113,9 @@ def main():
                         print(f'-> testing lr={lr}, batch={batch}, epochs={epochs} invert={label_invert}')
                         train_model(model, df, args.features,
                                     epochs=epochs, lr=lr, batch_size=batch,
-                                    invert=label_invert)
+                                    invert=label_invert,
+                                    weight_decay=args.weight_decay,
+                                    patience=args.patience)
                         # after training we can compute loss on full set
                         ds = df.dropna(subset=args.features).reset_index(drop=True)
                         ds_model = model.eval()
@@ -117,7 +145,9 @@ def main():
             model = UFCPredictor(input_dim=len(args.features))
             train_model(model, df, args.features,
                         epochs=args.epochs, lr=args.lr, batch_size=args.batch,
-                        invert=label_invert)
+                        invert=label_invert,
+                        weight_decay=args.weight_decay,
+                        patience=args.patience)
             if prefix:
                 import torch
                 # make sure the parent directory exists

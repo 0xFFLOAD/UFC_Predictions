@@ -189,6 +189,22 @@ python model/train.py \
   the script will save `model/checkpoints/model_win.pt` and
   `model/checkpoints/model_loss.pt` (or use `--save prefix` to change this).
 
+* or simply train with **all available features** (the twenty-five
+  engineered statistics) and tune architecture options:
+
+```bash
+python model/train.py --data extract/age/*.tsv \  # any combination
+    --all-features --epochs 100 --batch 64 \
+    --hidden1 128 --hidden2 64 --dropout 0.1 \
+    --weight-decay 1e-4 --patience 10
+```
+
+  the `--all-features` flag builds the input list automatically;
+  `--hidden1/--hidden2` control layer sizes, `--dropout` adds
+  regularization, and `--weight-decay`/`--patience` enable L2 and
+  early stopping.  These knobs make it possible to push accuracy
+  higher (aim for ≥70 %).
+
 The training routine automatically converts the `winner` column into a
 binary label (`Red`=1, `Blue`=0) and shuffles data during training.  A
 few additional options help when you want to flip the prediction target

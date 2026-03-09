@@ -48,17 +48,19 @@ class FeatureDataset(Dataset):
 
 
 class UFCPredictor(nn.Module):
-    def __init__(self, input_dim: int, hidden1: int = 64, hidden2: int = 32):
+    def __init__(self, input_dim: int, hidden1: int = 64, hidden2: int = 32,
+                 dropout: float = 0.0):
         super().__init__()
         # note: final layer produces raw score (logit); loss function
         # will apply sigmoid internally for stability
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden1),
-            nn.Tanh(),
-            nn.Linear(hidden1, hidden2),
-            nn.Tanh(),
-            nn.Linear(hidden2, 1),
-        )
+        layers = [nn.Linear(input_dim, hidden1), nn.Tanh()]
+        if dropout > 0:
+            layers.append(nn.Dropout(dropout))
+        layers.extend([nn.Linear(hidden1, hidden2), nn.Tanh()])
+        if dropout > 0:
+            layers.append(nn.Dropout(dropout))
+        layers.append(nn.Linear(hidden2, 1))
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.net(x)
@@ -121,7 +123,9 @@ def train_model(model: nn.Module,
                 lr: float = 1e-3,
                 batch_size: int = 32,
                 device: str = None,
-                invert: bool = False):
+                invert: bool = False,
+                weight_decay: float = 0.0,
+                patience: int = None):
     """Train the model on the supplied DataFrame.
 
     Parameters
@@ -152,9 +156,12 @@ def train_model(model: nn.Module,
 
     # use logits loss to avoid manual sigmoid and range issues
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr,
+                           weight_decay=weight_decay)
 
     model.train()
+    best_loss = float('inf')
+    patience_cnt = 0
     for epoch in range(1, epochs + 1):
         total_loss = 0.0
         for x_batch, y_batch in loader:
@@ -173,6 +180,16 @@ def train_model(model: nn.Module,
             total_loss += loss.item() * x_batch.size(0)
         avg_loss = total_loss / len(dataset)
         print(f"Epoch {epoch}/{epochs} - loss: {avg_loss:.4f}")
+        # early stopping
+        if patience is not None:
+            if avg_loss < best_loss:
+                best_loss = avg_loss
+                patience_cnt = 0
+            else:
+                patience_cnt += 1
+                if patience_cnt >= patience:
+                    print(f"Early stopping after {epoch} epochs (no improvement for {patience} epochs)")
+                    break
 
 
 if __name__ == '__main__':
