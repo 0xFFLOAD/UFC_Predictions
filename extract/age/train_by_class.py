@@ -3,11 +3,16 @@
 This helper lives alongside the age extractor and automates the
 per-class workflow.  It will:
 
-1. scan the current directory for files matching ``age_*.tsv`` (excluding
-   ``age.tsv`` itself)
-2. for each file train a fresh `UFCPredictor` using the standard
-   training script logic (with optional auto-LR)
-3. save the model's state dict under `../../model/checkpoints/<class>.pt`
+1. if no explicit data sources are given, scan the current directory for
+   files matching ``age_*.tsv`` (excluding ``age.tsv`` itself).  you can
+   alternatively pass ``--data`` with one or more TSV paths.
+2. for each weight class, load the corresponding rows from every source
+   and merge them on the fighter identifiers.  this allows you to
+   combine features (e.g. age plus age-delta) without manual preprocessing.
+3. train a fresh `UFCPredictor` using the standard training script
+   logic (with optional auto-LR), again using the same column list for
+   every class.
+4. save the model's state dict under `../../model/checkpoints/<class>.pt`
    so the learned parameters can be reused later without retraining
 
 The script is idempotent: if a checkpoint for a class already exists it
@@ -19,8 +24,7 @@ Usage::
     python train_by_class.py --epochs 50 --batch 32 --auto-lr
 
 The same set of features (by default ``['r_age','b_age']``) is used for
-all classes.  You can override via the ``--features`` argument.
-"""
+all classes.  You can override via the ``--features`` argument."""
 
 import argparse
 import glob

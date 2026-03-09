@@ -230,6 +230,12 @@ python model/train.py --per-class \
 ```
 
 This will print a loss for each weight class and a summary at the end.
+
+A companion evaluation helper exists at `extract/age/eval_by_class.py`.
+Run it from that directory to compute accuracy/loss against the same
+per-class TSVs (or pass `--data` to merge multiple feature tables
+first).  It is convenient for quickly comparing how different feature
+sets behave on each division.
 #### Programmatic use
 You can also import the classes directly:
 

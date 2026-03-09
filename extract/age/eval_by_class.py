@@ -9,6 +9,11 @@ Usage::
     cd extract/age
     python eval_by_class.py
 
+You may also pass ``--data`` with one or more feature TSVs; when multiple
+sources are given they are merged per class just as in
+``train_by_class.py``.  This lets you evaluate models on age, age-delta,
+or any combination of features without creating a new file.
+
 The script assumes features ``['r_age','b_age']`` by default but you can
 provide ``--features`` to override.  It also accepts a ``--batch`` size
 for evaluation batching.
@@ -53,6 +58,8 @@ def main():
                         help='Feature columns to use')
     parser.add_argument('--threshold', type=float, default=0.5,
                         help='Classification threshold on sigmoid output')
+    parser.add_argument('--data', nargs='+',
+                        help='TSV files to merge for each class; if omitted will look for age_<class>.tsv in current directory')
     args = parser.parse_args()
 
     checkpoints = glob.glob(os.path.join(CHECKPOINT_DIR, '*.pt'))
@@ -60,15 +67,34 @@ def main():
         print('No checkpoints found; run training first')
         return
 
+    # determine source files
+    if args.data:
+        source_files = args.data
+    else:
+        pattern = os.path.join(os.path.dirname(__file__), 'age_*.tsv')
+        source_files = [f for f in glob.glob(pattern) if os.path.basename(f) != 'age.tsv']
+
+    # helper to load and filter by class
+    def load_for_class(path, cls):
+        df = pd.read_csv(path, sep='\t')
+        if 'weight_class' in df.columns:
+            df = df[df['weight_class'] == cls]
+        return df
+
     results = []
     for chk in checkpoints:
         cls = os.path.splitext(os.path.basename(chk))[0]
-        # find tsv with matching class
-        tsv = os.path.join(os.path.dirname(__file__), f'age_{cls}.tsv')
-        if not os.path.exists(tsv):
-            print(f'warning: no TSV for class {cls} (expected {tsv})')
+        # merge data for this class
+        dfs = [load_for_class(path, cls) for path in source_files]
+        if not dfs or dfs[0].empty:
+            print(f'warning: no data for class {cls}')
             continue
-        df = pd.read_csv(tsv, sep='\t')
+        df = dfs[0]
+        for other in dfs[1:]:
+            on_cols = ['r_fighter', 'b_fighter', 'winner']
+            if 'weight_class' in df.columns and 'weight_class' in other.columns:
+                on_cols.append('weight_class')
+            df = df.merge(other, on=on_cols, how='inner')
         model = UFCPredictor(input_dim=len(args.features))
         model.load_state_dict(torch.load(chk))
         acc, loss = evaluate(model, df, args.features)
