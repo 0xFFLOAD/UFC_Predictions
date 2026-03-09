@@ -39,6 +39,12 @@ def main():
                         help='Run a learning-rate finder before training')
     parser.add_argument('--per-class', action='store_true',
                         help='Train separate models for each weight_class present in the data')
+    parser.add_argument('--invert', action='store_true',
+                        help='Flip labels (Red->0, Blue->1), i.e. predict loss instead of win')
+    parser.add_argument('--double', action='store_true',
+                        help='Train both win and loss models sequentially')
+    parser.add_argument('--save', type=str,
+                        help='Path prefix to save trained model(s); extension and suffix appended automatically')
     args = parser.parse_args()
 
     # read all supplied files
@@ -60,51 +66,73 @@ def main():
                 on_cols.append('weight_class')
             df = df.merge(other, on=on_cols, how='inner')
 
-    if args.search:
-        # build value lists
-        def parse_list(s, cast):
-            return [cast(x) for x in s.split(',')] if s else []
-        lrs = parse_list(args.lr_values, float)
-        batches = parse_list(args.batch_values, int)
-        epochs_list = parse_list(args.epoch_values, int)
-        if not (lrs and batches and epochs_list):
-            parser.error('Search mode requires --lr-values, --batch-values, and --epoch-values')
+    def do_train(label_invert: bool, prefix: str = None):
+        # helper that either does a single training run or the search mode
+        if args.search:
+            # build value lists
+            def parse_list(s, cast):
+                return [cast(x) for x in s.split(',')] if s else []
+            lrs = parse_list(args.lr_values, float)
+            batches = parse_list(args.batch_values, int)
+            epochs_list = parse_list(args.epoch_values, int)
+            if not (lrs and batches and epochs_list):
+                parser.error('Search mode requires --lr-values, --batch-values, and --epoch-values')
 
-        best = None
-        best_cfg = None
-        for lr in lrs:
-            for batch in batches:
-                for epochs in epochs_list:
-                    model = UFCPredictor(input_dim=len(args.features))
-                    print(f'-> testing lr={lr}, batch={batch}, epochs={epochs}')
-                    train_model(model, df, args.features,
-                                epochs=epochs, lr=lr, batch_size=batch)
-                    # after training we can compute loss on full set
-                    ds = df.dropna(subset=args.features).reset_index(drop=True)
-                    ds_model = model.eval()
-                    import torch
-                    xs = torch.tensor(ds[args.features].values.astype(float), dtype=torch.float32)
-                    with torch.no_grad():
-                        logits = ds_model(xs)
-                        lossfn = torch.nn.BCEWithLogitsLoss()
-                        ys = torch.tensor((ds['winner']=='Red').astype(float)).unsqueeze(1)
-                        loss_val = lossfn(logits, ys).item()
-                    print(f'    final loss: {loss_val:.4f}')
-                    if best is None or loss_val < best:
-                        best = loss_val
-                        best_cfg = (lr, batch, epochs)
-        print(f'BEST configuration: lr={best_cfg[0]}, batch={best_cfg[1]}, epochs={best_cfg[2]} -> loss={best:.4f}')
+            best = None
+            best_cfg = None
+            for lr in lrs:
+                for batch in batches:
+                    for epochs in epochs_list:
+                        model = UFCPredictor(input_dim=len(args.features))
+                        print(f'-> testing lr={lr}, batch={batch}, epochs={epochs} invert={label_invert}')
+                        train_model(model, df, args.features,
+                                    epochs=epochs, lr=lr, batch_size=batch,
+                                    invert=label_invert)
+                        # after training we can compute loss on full set
+                        ds = df.dropna(subset=args.features).reset_index(drop=True)
+                        ds_model = model.eval()
+                        import torch
+                        xs = torch.tensor(ds[args.features].values.astype(float), dtype=torch.float32)
+                        with torch.no_grad():
+                            logits = ds_model(xs)
+                            lossfn = torch.nn.BCEWithLogitsLoss()
+                            ys = torch.tensor((ds['winner']=='Red').astype(float)).unsqueeze(1)
+                            if label_invert:
+                                ys = 1 - ys
+                            loss_val = lossfn(logits, ys).item()
+                        print(f'    final loss: {loss_val:.4f}')
+                        if best is None or loss_val < best:
+                            best = loss_val
+                            best_cfg = (lr, batch, epochs)
+            print(f'BEST configuration (invert={label_invert}): lr={best_cfg[0]}, batch={best_cfg[1]}, epochs={best_cfg[2]} -> loss={best:.4f}')
+        else:
+            if args.auto_lr:
+                from model.neural_network import find_learning_rate
+                print('running learning-rate finder...')
+                lrs, losses, best_lr = find_learning_rate(df, args.features,
+                                                          batch_size=args.batch,
+                                                          invert=label_invert)
+                print(f'suggested lr = {best_lr:.6g}')
+                args.lr = best_lr
+            model = UFCPredictor(input_dim=len(args.features))
+            train_model(model, df, args.features,
+                        epochs=args.epochs, lr=args.lr, batch_size=args.batch,
+                        invert=label_invert)
+            if prefix:
+                import torch
+                # make sure the parent directory exists
+                import os
+                outpath = prefix + ("_loss.pt" if label_invert else "_win.pt")
+                os.makedirs(os.path.dirname(outpath), exist_ok=True)
+                torch.save(model.state_dict(), outpath)
+                print(f"saved model to {outpath}")
+
+    # perform training runs
+    if args.double:
+        do_train(label_invert=False, prefix=args.save or 'model/checkpoints/model')
+        do_train(label_invert=True, prefix=args.save or 'model/checkpoints/model')
     else:
-        if args.auto_lr:
-            from model.neural_network import find_learning_rate
-            print('running learning-rate finder...')
-            lrs, losses, best_lr = find_learning_rate(df, args.features,
-                                                      batch_size=args.batch)
-            print(f'suggested lr = {best_lr:.6g}')
-            args.lr = best_lr
-        model = UFCPredictor(input_dim=len(args.features))
-        train_model(model, df, args.features,
-                    epochs=args.epochs, lr=args.lr, batch_size=args.batch)
+        do_train(label_invert=args.invert, prefix=args.save or 'model/checkpoints/model')
 
 
 if __name__ == '__main__':

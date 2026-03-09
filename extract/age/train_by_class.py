@@ -49,6 +49,10 @@ def main():
                         help='Feature columns to use')
     parser.add_argument('--data', nargs='+',
                         help='TSV files to merge for each class; if omitted will use age_*.tsv in the current directory')
+    parser.add_argument('--invert', action='store_true',
+                        help='Train models predicting loss instead of win for each class')
+    parser.add_argument('--double', action='store_true',
+                        help='Train both win and loss models for each class')
     parser.add_argument('--force', action='store_true',
                         help='Retrain even if checkpoint exists')
     args = parser.parse_args()
@@ -75,47 +79,69 @@ def main():
     classes = first['weight_class'].dropna().unique()
 
     for cls in classes:
-        chk = os.path.join(CHECKPOINT_DIR, f'{cls}.pt')
-        if os.path.exists(chk) and not args.force:
-            print(f"Skipping {cls}, checkpoint already exists")
-            continue
+        # determine file basenames for this class depending on invert/double
+        def checkpoint_name(invert_flag):
+            base = f'{cls}'
+            if args.double:
+                suffix = '_loss' if invert_flag else '_win'
+            elif args.invert:
+                suffix = '_loss'
+            else:
+                suffix = ''
+            return os.path.join(CHECKPOINT_DIR, base + suffix + '.pt')
 
-        # merge all sources for this class horizontally
-        dfs = [load_for_class(path, cls) for path in source_files]
-        df = dfs[0]
-        for other in dfs[1:]:
-            on_cols = ['r_fighter', 'b_fighter', 'winner']
-            if 'weight_class' in df.columns and 'weight_class' in other.columns:
-                on_cols.append('weight_class')
-            df = df.merge(other, on=on_cols, how='inner')
+        # function to train one model
+        def run_single(invert_flag):
+            chk = checkpoint_name(invert_flag)
+            if os.path.exists(chk) and not args.force:
+                print(f"Skipping {cls} ({'loss' if invert_flag else 'win'}), checkpoint already exists")
+                return
+            print(f"Preparing data for class {cls} (invert={invert_flag})")
+            # merge all sources for this class horizontally
+            dfs = [load_for_class(path, cls) for path in source_files]
+            df = dfs[0]
+            for other in dfs[1:]:
+                on_cols = ['r_fighter', 'b_fighter', 'winner']
+                if 'weight_class' in df.columns and 'weight_class' in other.columns:
+                    on_cols.append('weight_class')
+                df = df.merge(other, on=on_cols, how='inner')
 
-        df_clean = df.dropna(subset=args.features)
-        print(f"Training class {cls} ({len(df_clean)} rows after merge)")
-        if len(df_clean) == 0:
-            print(f"  no data after dropping NaNs, skipping {cls}")
-            continue
-        model = UFCPredictor(input_dim=len(args.features))
+            df_clean = df.dropna(subset=args.features)
+            print(f"Training class {cls} ({len(df_clean)} rows after merge)")
+            if len(df_clean) == 0:
+                print(f"  no data after dropping NaNs, skipping {cls}")
+                return
+            model = UFCPredictor(input_dim=len(args.features))
 
-        if args.auto_lr and len(df_clean) >= args.batch:
-            from model.neural_network import find_learning_rate
-            print('  finding learning rate...')
-            # safe call: if finder returns no values, use default
-            lrs, losses, best_lr = find_learning_rate(df_clean, args.features,
-                                                      batch_size=args.batch)
-            if best_lr is None:
-                best_lr = args.lr
-            print(f'  suggested lr {best_lr:.6g}')
-            lr = best_lr
+            if args.auto_lr and len(df_clean) >= args.batch:
+                from model.neural_network import find_learning_rate
+                print('  finding learning rate...')
+                lrs, losses, best_lr = find_learning_rate(df_clean, args.features,
+                                                          batch_size=args.batch,
+                                                          invert=invert_flag)
+                if best_lr is None:
+                    best_lr = args.lr
+                print(f'  suggested lr {best_lr:.6g}')
+                lr_val = best_lr
+            else:
+                lr_val = args.lr
+
+            train_model(model, df_clean, args.features,
+                        epochs=args.epochs, lr=lr_val, batch_size=args.batch,
+                        invert=invert_flag)
+
+            torch = __import__('torch')
+            torch.save(model.state_dict(), chk)
+            print(f"Saved checkpoint to {chk}\n")
+
+        # decide which runs to perform
+        if args.double:
+            run_single(False)
+            run_single(True)
+        elif args.invert:
+            run_single(True)
         else:
-            # either auto-lr disabled or too few samples for a sweep
-            lr = args.lr
-
-        train_model(model, df_clean, args.features,
-                    epochs=args.epochs, lr=lr, batch_size=args.batch)
-
-        torch = __import__('torch')
-        torch.save(model.state_dict(), chk)
-        print(f"Saved checkpoint to {chk}\n")
+            run_single(False)
 
 
 if __name__ == '__main__':

@@ -98,6 +98,11 @@ pandas installed you'll see an error prompting installation. On macOS
 the system Python is managed by Homebrew and will refuse a normal
 `pip install`; instead use one of the following approaches:
 
+> **Note:** the training helpers (`train.py`, `train_by_class.py`,
+> `eval_by_class.py`) also require PyTorch; install it in the same
+> environment as pandas, either via `pip install torch` or the appropriate
+> `conda` command.
+
 * Activate the project's Conda environment (already used by this
   workspace). For example:
 
@@ -173,7 +178,23 @@ python model/train.py \
 ```
 
 The training routine automatically converts the `winner` column into a
-binary label (`Red`=1, `Blue`=0) and shuffles data during training.
+binary label (`Red`=1, `Blue`=0) and shuffles data during training.  A
+few additional options help when you want to flip the prediction target
+or generate both models in one go:
+
+* `--invert` treats `Blue` victories as the positive class (i.e. you
+   are predicting the loss of the red fighter).  This simply inverts the
+   label during training and evaluation.
+* `--double` runs the training twice: first predicting wins, then
+   predicting losses.  Two checkpoint files are written with suffixes
+   `_win.pt` and `_loss.pt` (or a custom `--save` prefix if you provide
+   one).
+* `--save <prefix>` specifies a path prefix where the model(s) should be
+   saved.  When using `--double` the `_win.pt`/`_loss.pt` suffixes are
+   appended automatically; otherwise `_win.pt` is the default.
+
+These flags work alongside `--auto-lr`, `--search`, and
+`--per-class`.
 
 #### Hyperparameter grid search
 To avoid blind guessing of lr/batch/epoch values you can ask the script
@@ -231,11 +252,19 @@ python model/train.py --per-class \
 
 This will print a loss for each weight class and a summary at the end.
 
+The helper script `extract/age/train_by_class.py` offers the same
+overlapping-feature merging and, in addition, understands `--invert` and
+`--double` so you can produce loss models (or both win/loss) for every
+class in one shot.  The evaluation helper similarly supports inverted
+labels.
+
 A companion evaluation helper exists at `extract/age/eval_by_class.py`.
 Run it from that directory to compute accuracy/loss against the same
 per-class TSVs (or pass `--data` to merge multiple feature tables
-first).  It is convenient for quickly comparing how different feature
-sets behave on each division.
+first).  You can also use `--invert` to evaluate _loss_ models, and the
+script will automatically detect files whose names end in `_loss.pt`.
+It is convenient for quickly comparing how different feature sets behave
+on each division.
 #### Programmatic use
 You can also import the classes directly:
 

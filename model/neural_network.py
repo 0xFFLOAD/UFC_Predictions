@@ -22,7 +22,7 @@ from torch.utils.data import Dataset, DataLoader
 
 
 class FeatureDataset(Dataset):
-    def __init__(self, dataframe, feature_columns, label_column='winner'):
+    def __init__(self, dataframe, feature_columns, label_column='winner', invert: bool = False):
         # drop any rows where the requested features are missing
         df = dataframe.dropna(subset=feature_columns)
         arr = df[feature_columns].values.astype(float)
@@ -34,10 +34,11 @@ class FeatureDataset(Dataset):
         normed = (arr - mean) / std
         self.features = torch.tensor(normed, dtype=torch.float32)
         # convert winner to binary: 'Red' -> 1, 'Blue' -> 0 (or adjust)
-        self.labels = torch.tensor(
-            (df[label_column] == 'Red').astype(float).values,
-            dtype=torch.float32,
-        ).unsqueeze(1)
+        labels = (df[label_column] == 'Red').astype(float).values
+        if invert:
+            # predict loss: swap positive/negative
+            labels = 1.0 - labels
+        self.labels = torch.tensor(labels, dtype=torch.float32).unsqueeze(1)
 
     def __len__(self):
         return len(self.features)
@@ -65,7 +66,7 @@ class UFCPredictor(nn.Module):
 
 def find_learning_rate(df, feature_columns, label_column='winner',
                        init_lr=1e-6, final_lr=10, num_iters=100,
-                       batch_size=32, device=None):
+                       batch_size=32, device=None, invert: bool = False):
     """Basic LR finder that returns a recommended learning rate.
 
     It trains the network for ``num_iters`` mini-batches, exponentially
@@ -78,7 +79,8 @@ def find_learning_rate(df, feature_columns, label_column='winner',
     if device is None:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = UFCPredictor(input_dim=len(feature_columns)).to(device)
-    dataset = FeatureDataset(df, feature_columns, label_column)
+    dataset = FeatureDataset(df, feature_columns, label_column,
+                             invert=invert)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
     criterion = nn.BCEWithLogitsLoss()
@@ -118,7 +120,8 @@ def train_model(model: nn.Module,
                 epochs: int = 20,
                 lr: float = 1e-3,
                 batch_size: int = 32,
-                device: str = None):
+                device: str = None,
+                invert: bool = False):
     """Train the model on the supplied DataFrame.
 
     Parameters

@@ -31,14 +31,15 @@ CHECKPOINT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                               '..', 'model', 'checkpoints'))
 
 
-def evaluate(model, df, feature_columns):
+def evaluate(model, df, feature_columns, invert_flag=False):
     # prepare data
     df = df.dropna(subset=feature_columns)
     xs = torch.tensor(df[feature_columns].values.astype(float), dtype=torch.float32)
     if 'winner' not in df.columns:
         raise ValueError('no winner column present')
-    # ensure we reference column by name, not by index
     ys = torch.tensor((df.loc[:, 'winner'] == 'Red').astype(float).values).unsqueeze(1)
+    if invert_flag:
+        ys = 1 - ys
     model.eval()
     with torch.no_grad():
         logits = model(xs)
@@ -60,6 +61,8 @@ def main():
                         help='Classification threshold on sigmoid output')
     parser.add_argument('--data', nargs='+',
                         help='TSV files to merge for each class; if omitted will look for age_<class>.tsv in current directory')
+    parser.add_argument('--invert', action='store_true',
+                        help='Interpret checkpoints as loss models (labels inverted)')
     args = parser.parse_args()
 
     checkpoints = glob.glob(os.path.join(CHECKPOINT_DIR, '*.pt'))
@@ -84,6 +87,7 @@ def main():
     results = []
     for chk in checkpoints:
         cls = os.path.splitext(os.path.basename(chk))[0]
+        invert_flag = args.invert or chk.endswith('_loss.pt')
         # merge data for this class
         dfs = [load_for_class(path, cls) for path in source_files]
         if not dfs or dfs[0].empty:
@@ -97,9 +101,10 @@ def main():
             df = df.merge(other, on=on_cols, how='inner')
         model = UFCPredictor(input_dim=len(args.features))
         model.load_state_dict(torch.load(chk))
-        acc, loss = evaluate(model, df, args.features)
-        results.append((cls, len(df), acc, loss))
-        print(f'{cls}: {len(df)} samples, acc={acc:.3f}, loss={loss:.3f}')
+        acc, loss = evaluate(model, df, args.features, invert_flag=invert_flag)
+        results.append((cls, len(df), acc, loss, invert_flag))
+        tag = 'loss' if invert_flag else 'win'
+        print(f'{cls} ({tag}): {len(df)} samples, acc={acc:.3f}, loss={loss:.3f}')
 
     if results:
         print('\nSummary:')
