@@ -70,9 +70,22 @@ for idx,row in clean.iterrows():
     loaded = 0
     for model_path in ensembles[wc]:
         try:
-            model=UFCPredictor(input_dim=len(features),hidden1=64,hidden2=32)
-            model.load_state_dict(torch.load(model_path))
-            print(f"    loaded checkpoint {model_path}")
+            sd = torch.load(model_path)
+            # infer architecture from state dict shapes
+            w0 = sd['net.0.weight']
+            hidden1 = w0.shape[0]
+            in_dim = w0.shape[1]
+            w1 = sd.get('net.2.weight', None)
+            if w1 is not None:
+                hidden2 = w1.shape[0]
+            else:
+                hidden2 = 0
+            # construct model accordingly
+            model = UFCPredictor(input_dim=in_dim,
+                                 hidden1=hidden1,
+                                 hidden2=hidden2)
+            model.load_state_dict(sd)
+            print(f"    loaded checkpoint {model_path} (in={in_dim},h1={hidden1},h2={hidden2})")
         except Exception as e:
             print(f"    skipping incompatible checkpoint {model_path}: {e}")
             continue
