@@ -220,17 +220,24 @@ def main():
                                                         invert=invert_flag,
                                                         weight_decay=args.weight_decay,
                                                         patience=args.patience)
-                                            # compute loss on full cleaned set
+                                            # compute loss on full cleaned set using the same
+                                            # normalization as training; previous code fed raw
+                                            # values, which was why `epoch` loss sometimes didn't
+                                            # match the reported `final loss`.
+                                            from model.neural_network import FeatureDataset
                                             ds = df_clean.reset_index(drop=True)
-                                            ds_model = model.eval()
-                                            xs = torch.tensor(ds[args.features].values.astype(float), dtype=torch.float32)
-                                            with torch.no_grad():
-                                                logits = ds_model(xs)
-                                                lossfn = torch.nn.BCEWithLogitsLoss()
-                                                ys = torch.tensor((ds['winner']=='Red').astype(float)).unsqueeze(1)
-                                                if invert_flag:
-                                                    ys = 1 - ys
-                                                loss_val = lossfn(logits, ys).item()
+                                            if len(ds) > 0:
+                                                dataset_obj = FeatureDataset(ds, args.features,
+                                                                            invert=invert_flag)
+                                                xs = dataset_obj.features.to(next(model.parameters()).device)
+                                                ys = dataset_obj.labels.to(xs.device)
+                                                model.eval()
+                                                with torch.no_grad():
+                                                    logits = model(xs)
+                                                    lossfn = torch.nn.BCEWithLogitsLoss()
+                                                    loss_val = lossfn(logits, ys).item()
+                                            else:
+                                                loss_val = float('inf')
                                             print(f'    final loss: {loss_val:.4f}')
                                             if best is None or loss_val < best:
                                                 best = loss_val

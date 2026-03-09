@@ -246,6 +246,16 @@ or generate both models in one go:
 These flags work alongside `--auto-lr`, `--search`, and
 `--per-class`.
 
+> **Note on reported losses:** the training loop normalizes input
+> features (zero mean/unit variance) inside `FeatureDataset`; epoch
+> losses printed during training are computed on that normalized data.
+> The grid‑search code used to compute its “final loss” by feeding raw
+> feature vectors to the model, which explains confusing outputs such as
+> “Epoch 50/50 – loss: 0.3381” followed by `final loss: 0.8601`.  The
+> fix in the code now creates a `FeatureDataset` for evaluation so that
+> both numbers are comparable.  When writing your own evaluation logic
+> be sure to apply the same normalization step.
+
 #### Hyperparameter grid search
 To avoid blind guessing of lr/batch/epoch values you can ask the script
 to sweep a small grid.  Supply comma-separated lists for each parameter

@@ -32,21 +32,22 @@ CHECKPOINT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__),
 
 
 def evaluate(model, df, feature_columns, invert_flag=False):
-    # prepare data
+    # prepare data and apply the same normalization used during training
+    from model.neural_network import FeatureDataset
     df = df.dropna(subset=feature_columns)
-    xs = torch.tensor(df[feature_columns].values.astype(float), dtype=torch.float32)
-    if 'winner' not in df.columns:
-        raise ValueError('no winner column present')
-    ys = torch.tensor((df.loc[:, 'winner'] == 'Red').astype(float).values).unsqueeze(1)
-    if invert_flag:
-        ys = 1 - ys
+    if len(df) == 0:
+        return 0.0, float('inf')
+    dataset_obj = FeatureDataset(df, feature_columns, invert=invert_flag)
+    xs = dataset_obj.features
+    ys = dataset_obj.labels
+
     model.eval()
     with torch.no_grad():
         logits = model(xs)
         preds = torch.sigmoid(logits)
         preds_label = (preds > 0.5).float()
         correct = (preds_label == ys).float().sum().item()
-    acc = correct / len(df) if len(df) > 0 else 0.0
+    acc = correct / len(df)
     # compute loss
     lossfn = torch.nn.BCEWithLogitsLoss()
     loss_val = lossfn(logits, ys).item()

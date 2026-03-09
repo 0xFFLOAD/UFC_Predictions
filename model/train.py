@@ -161,17 +161,26 @@ def main():
                                                     invert=label_invert,
                                                     weight_decay=args.weight_decay,
                                                     patience=args.patience)
-                                        # after training compute loss on full set
-                                        ds = df.dropna(subset=args.features).reset_index(drop=True)
-                                        ds_model = model.eval()
-                                        xs = torch.tensor(ds[args.features].values.astype(float), dtype=torch.float32)
-                                        with torch.no_grad():
-                                            logits = ds_model(xs)
-                                            lossfn = torch.nn.BCEWithLogitsLoss()
-                                            ys = torch.tensor((ds['winner']=='Red').astype(float)).unsqueeze(1)
-                                            if label_invert:
-                                                ys = 1 - ys
-                                            loss_val = lossfn(logits, ys).item()
+                                        # after training compute loss on clean dataset using same
+                                        # normalization that was applied during training.  the
+                                        # previous implementation fed raw feature values to the
+                                        # model, which produced wildly different numbers.  here we
+                                        # instantiate a FeatureDataset and reuse its tensors.
+                                        import torch
+                                        from model.neural_network import FeatureDataset
+                                        ds_clean = df.dropna(subset=args.features).reset_index(drop=True)
+                                        if len(ds_clean) > 0:
+                                            dataset_obj = FeatureDataset(ds_clean, args.features,
+                                                                        invert=label_invert)
+                                            xs = dataset_obj.features.to(next(model.parameters()).device)
+                                            ys = dataset_obj.labels.to(xs.device)
+                                            model.eval()
+                                            with torch.no_grad():
+                                                logits = model(xs)
+                                                lossfn = torch.nn.BCEWithLogitsLoss()
+                                                loss_val = lossfn(logits, ys).item()
+                                        else:
+                                            loss_val = float('inf')
                                         print(f'    final loss: {loss_val:.4f}')
                                         if best is None or loss_val < best:
                                             best = loss_val
