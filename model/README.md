@@ -116,6 +116,49 @@ python3 extract/height_delta/height_delta.py
 # creates extract/height_delta/height_delta.tsv
 ```
 
+### Model Implementation & Training
+A basic PyTorch implementation of the UFC prediction network now
+lives in `model/neural_network.py` with a convenience training script
+at `model/train.py`.
+
+#### Requirements
+Install PyTorch in the same environment used for pandas. For example:
+
+```bash
+# use pip or conda depending on your setup
+pip install torch           # CPU-only
+# or
+conda install pytorch -c pytorch
+```
+
+#### Training via script
+Concatenate one or more TSV feature files and specify the column names
+to use as inputs:
+
+```bash
+python model/train.py \
+    --data extract/age/age.tsv extract/height_delta/height_delta.tsv \
+    --features height_diff reach_diff age_diff weight_diff \
+    --epochs 50 --lr 0.001
+```
+
+The training routine automatically converts the `winner` column into a
+binary label (`Red`=1, `Blue`=0) and shuffles data during training.
+
+#### Programmatic use
+You can also import the classes directly:
+
+```python
+from model.neural_network import UFCPredictor, train_model
+import pandas as pd
+
+df = pd.read_csv('extract/age/age.tsv', sep='\t')
+features = ['r_age', 'b_age']
+model = UFCPredictor(input_dim=len(features))
+train_model(model, df, features)
+```
+
+
 
 
 ## Building
