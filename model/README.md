@@ -246,6 +246,29 @@ or generate both models in one go:
 These flags work alongside `--auto-lr`, `--search`, and
 `--per-class`.
 
+### Checkpoint handling
+The script now **retains every model it ever trains**.  Previously a
+training run would delete any existing files matching the save prefix;
+in grid‑search mode nothing was saved at all.  Because you requested a
+complete history, train.py has been updated to behave as follows:
+
+* Every invocation of `train.py` writes one or more `.pt` files.  if
+  you supply `--save prefix` the files will start with that prefix; if
+  you don't the default is `model/checkpoints/model`.
+* During `--search` each trial is immediately dumped with a unique
+  filename containing the hyperparameters and a millisecond timestamp:
+  `prefix_lr0.001_b64_e50_h1256_h2256_h364_s0_1617901234567_win.pt`,
+  for example.  This guarantees that even identical parameter sets will
+  produce separate files instead of overwriting each other.
+* Ensemble runs append `_0`, `_1`, … to the prefix so you can keep all
+  ensemble members.  Training without any special options still writes
+  `prefix_win.pt` (or `_loss.pt`), but it no longer deletes the previous
+  checkpoint; you get whatever the last invocation produces alongside
+  whichever older models remain in the directory.
+
+This makes it trivial to keep a complete archive of every attempt; you can
+prune manually when the directory grows too large.
+
 > **Note on reported losses:** the training loop normalizes input
 > features (zero mean/unit variance) inside `FeatureDataset`; epoch
 > losses printed during training are computed on that normalized data.

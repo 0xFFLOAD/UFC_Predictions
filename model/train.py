@@ -161,6 +161,17 @@ def main():
                                                     invert=label_invert,
                                                     weight_decay=args.weight_decay,
                                                     patience=args.patience)
+                                        # save this particular configuration so every trial is
+                                        # persisted; include hyperparameters and timestamp to
+                                        # avoid collisions and allow later inspection
+                                        if prefix:
+                                            import time, os
+                                            ts = int(time.time() * 1000)
+                                            cfgname = f"lr{lr}_b{batch}_e{epochs}_h1{h1}_h2{h2}_h3{h3}_s{seed}_{ts}"
+                                            outpath = prefix + "_" + cfgname + ("_loss.pt" if label_invert else "_win.pt")
+                                            os.makedirs(os.path.dirname(outpath), exist_ok=True)
+                                            torch.save(model.state_dict(), outpath)
+                                            print(f"    saved trial to {outpath}")
                                         # after training compute loss on clean dataset using same
                                         # normalization that was applied during training.  the
                                         # previous implementation fed raw feature values to the
@@ -216,14 +227,10 @@ def main():
 
     # perform training runs (possibly ensemble)
     def run_seq(label_invert, base_prefix):
-        import torch, glob, os
-        # remove any old models matching this prefix
-        pattern = base_prefix + "*" + ("_loss.pt" if label_invert else "_win.pt")
-        for old in glob.glob(pattern):
-            try:
-                os.remove(old)
-            except OSError:
-                pass
+        import torch, os
+        # we no longer delete previous files; every run will produce
+        # a distinct checkpoint.  the `do_train` helper adds a timestamp
+        # or hyperparameter suffix to guarantee uniqueness.
         paths = []
         for i in range(args.ensemble):
             seed = None if args.ensemble == 1 else i
@@ -231,6 +238,7 @@ def main():
             if seed is not None:
                 torch.manual_seed(seed)
             do_train(label_invert=label_invert, prefix=prefix)
+            # the helper returns the actual path it saved (it appends .pt)
             paths.append(prefix + ("_loss.pt" if label_invert else "_win.pt"))
         return paths
 
