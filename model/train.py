@@ -12,6 +12,8 @@ DataFrame, then invokes the training routine defined in
 
 import argparse
 import pandas as pd
+import torch
+import numpy as np
 from model.neural_network import UFCPredictor, train_model
 
 
@@ -57,6 +59,8 @@ def main():
                         help='Train both win and loss models sequentially')
     parser.add_argument('--save', type=str,
                         help='Path prefix to save trained model(s); extension and suffix appended automatically')
+    parser.add_argument('--ensemble', type=int, default=1,
+                        help='Train this many models and ensemble their outputs')
     args = parser.parse_args()
 
     # read all supplied files
@@ -161,12 +165,58 @@ def main():
                 torch.save(model.state_dict(), outpath)
                 print(f"saved model to {outpath}")
 
-    # perform training runs
+    # perform training runs (possibly ensemble)
+    def run_seq(label_invert, base_prefix):
+        import torch
+        paths = []
+        for i in range(args.ensemble):
+            seed = None if args.ensemble == 1 else i
+            prefix = base_prefix + (f"_{i}" if args.ensemble>1 else "")
+            if seed is not None:
+                torch.manual_seed(seed)
+            do_train(label_invert=label_invert, prefix=prefix)
+            paths.append(prefix + ("_loss.pt" if label_invert else "_win.pt"))
+        return paths
+
     if args.double:
-        do_train(label_invert=False, prefix=args.save or 'model/checkpoints/model')
-        do_train(label_invert=True, prefix=args.save or 'model/checkpoints/model')
+        win_models = run_seq(False, args.save or 'model/checkpoints/model')
+        loss_models = run_seq(True, args.save or 'model/checkpoints/model')
     else:
-        do_train(label_invert=args.invert, prefix=args.save or 'model/checkpoints/model')
+        models = run_seq(args.invert, args.save or 'model/checkpoints/model')
+        win_models = models if not args.invert else []
+        loss_models = models if args.invert else []
+
+    # if ensemble more than one, evaluate accuracy on training data
+    if args.ensemble > 1:
+        import torch
+        df_full = df.dropna(subset=args.features).reset_index(drop=True)
+        import numpy as np
+        def eval_models(paths, invert_flag):
+            xs = torch.tensor(df_full[args.features].values.astype(float), dtype=torch.float32)
+            ys = torch.tensor((df_full.loc[:, 'winner']=='Red').astype(float)).unsqueeze(1)
+            if invert_flag:
+                ys = 1 - ys
+            logits_sum = None
+            for p in paths:
+                m = UFCPredictor(input_dim=len(args.features),
+                                  hidden1=args.hidden1,
+                                  hidden2=args.hidden2,
+                                  dropout=args.dropout)
+                m.load_state_dict(torch.load(p))
+                m.eval()
+                with torch.no_grad():
+                    out = torch.sigmoid(m(xs))
+                logits_sum = out if logits_sum is None else logits_sum + out
+            avg = logits_sum / len(paths)
+            pred_labels = (avg > 0.5).float()
+            acc = (pred_labels == ys).float().mean().item()
+            return acc
+        if win_models:
+            acc = eval_models(win_models, invert_flag=False)
+            print(f'Ensemble accuracy (win models) on training set: {acc*100:.2f}%')
+        if loss_models:
+            acc = eval_models(loss_models, invert_flag=True)
+            print(f'Ensemble accuracy (loss models) on training set: {acc*100:.2f}%')
 
 
 if __name__ == '__main__':
