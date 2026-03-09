@@ -43,6 +43,16 @@ def main():
     parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--batch', type=int, default=32)
     parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--hidden1', type=int, default=64,
+                        help='Size of first hidden layer')
+    parser.add_argument('--hidden2', type=int, default=32,
+                        help='Size of second hidden layer')
+    parser.add_argument('--dropout', type=float, default=0.0,
+                        help='Dropout probability')
+    parser.add_argument('--weight-decay', type=float, default=0.0,
+                        help='L2 regularization strength')
+    parser.add_argument('--patience', type=int,
+                        help='Early stopping patience')
     parser.add_argument('--auto-lr', action='store_true',
                         help='Run LR finder before each class')
     parser.add_argument('--features', nargs='+', default=['r_age', 'b_age'],
@@ -117,7 +127,10 @@ def main():
             if len(df_clean) == 0:
                 print(f"  no data after dropping NaNs, skipping {cls}")
                 return
-            model = UFCPredictor(input_dim=len(args.features))
+            model = UFCPredictor(input_dim=len(args.features),
+                                 hidden1=args.hidden1,
+                                 hidden2=args.hidden2,
+                                 dropout=args.dropout)
 
             if args.auto_lr and len(df_clean) >= args.batch:
                 from model.neural_network import find_learning_rate
@@ -134,7 +147,9 @@ def main():
 
             train_model(model, df_clean, args.features,
                         epochs=args.epochs, lr=lr_val, batch_size=args.batch,
-                        invert=invert_flag)
+                        invert=invert_flag,
+                        weight_decay=args.weight_decay,
+                        patience=args.patience)
 
             torch = __import__('torch')
             torch.save(model.state_dict(), chk)

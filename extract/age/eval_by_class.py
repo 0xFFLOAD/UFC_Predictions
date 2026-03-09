@@ -112,9 +112,16 @@ def main():
 
     if results:
         print('\nSummary:')
-        print('class\tsize\tacc\tloss')
-        for cls, size, acc, loss in results:
-            print(f'{cls}\t{size}\t{acc:.3f}\t{loss:.3f}')
+        print('class\tsize\tacc\tloss\tinvert')
+        total = 0
+        correct = 0
+        for cls, size, acc, loss, inv in results:
+            tag = 'loss' if inv else 'win'
+            print(f'{cls}\t{size}\t{acc:.3f}\t{loss:.3f}\t{tag}')
+            total += size
+            correct += acc * size
+        overall = correct / total if total>0 else 0
+        print(f'\noverall accuracy = {overall:.3f} ({overall*100:.2f}%)')
 
 
 if __name__ == '__main__':
