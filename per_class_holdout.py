@@ -13,6 +13,7 @@ files=[
     'extract/takedown_accuracy_delta/takedown_accuracy_delta.tsv',
     'extract/striking_advantage/striking_advantage.tsv',
     'extract/prev_wins_against_opp/prev_wins_against_opp.tsv',
+    'extract/sig_strikes_pm_delta/sig_strikes_pm_delta.tsv',
 ]
 
 def make_df():
