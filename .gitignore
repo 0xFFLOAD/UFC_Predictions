@@ -36,3 +36,6 @@ extract/unprepared_for_fight/unprepared_for_fight.tsv
 extract/weight/weight.tsv
 extract/weight_delta/weight_delta.tsv
 extract/win_loss_unprepared_for_fight/win_loss_unprepared_for_fight.tsv
+*.tsv
+*.pt
+model/__pycache__/neural_network.cpython-314.pyc

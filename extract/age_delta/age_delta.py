@@ -13,7 +13,7 @@ DATA_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 
 
 def extract():
     df = pd.read_csv(DATA_PATH)
-    base_cols = ['r_fighter', 'b_fighter', 'winner']
+    base_cols = ['r_fighter', 'b_fighter', 'winner', 'weight_class']
     cols = ['age_diff']
     existing = [c for c in cols if c in df.columns]
     if not existing:
@@ -28,3 +28,9 @@ if __name__ == '__main__':
     outpath = os.path.join(os.path.dirname(__file__), outname)
     df.to_csv(outpath, sep='\t', index=False)
     print(f"Wrote {outpath}")
+    if 'weight_class' in df.columns:
+        for wc, sub in df.groupby('weight_class'):
+            safe = wc.replace(' ', '_').replace('/', '_')
+            subpath = os.path.join(os.path.dirname(__file__), f"age_delta_{safe}.tsv")
+            sub.to_csv(subpath, sep='\t', index=False)
+            print(f"Wrote {subpath} ({len(sub)} rows)")

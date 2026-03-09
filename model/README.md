@@ -80,6 +80,14 @@ data stays tied to the participants and outcome; features themselves
 are appended or computed as additional columns. This avoids
 orphaned/random rows when working with individual feature files.
 
+For the age extractor specifically, the output is further split by
+weight class: running `python extract/age/age.py` creates the main
+`age.tsv` plus additional files like `age_Bantamweight.tsv`,
+`age_Heavyweight.tsv`, etc.  The separation reflects the fact that
+fighters from different classes never meet, so models can be trained
+on each class independently.  Simply point the training script at the
+appropriate class-specific TSV when you want to focus on one category.
+
 The extractors rely on **pandas**. If you attempt to run one without
 pandas installed you'll see an error prompting installation. On macOS
 the system Python is managed by Homebrew and will refuse a normal
@@ -145,6 +153,50 @@ python model/train.py \
 The training routine automatically converts the `winner` column into a
 binary label (`Red`=1, `Blue`=0) and shuffles data during training.
 
+#### Hyperparameter grid search
+To avoid blind guessing of lr/batch/epoch values you can ask the script
+to sweep a small grid.  Supply comma-separated lists for each parameter
+and include `--search` on the command line.  For example:
+
+```bash
+python model/train.py --search \
+    --data extract/age/age.tsv \
+    --features r_age b_age \
+    --lr-values 1e-4,5e-4,1e-3 \
+    --batch-values 16,32,64 \
+    --epoch-values 20,50
+```
+
+The script will train one model for each combination and report the
+best configuration (lowest loss) at the end.
+
+#### Automatic learning‑rate finder
+If you only care about picking a sensible learning rate you can let the
+script estimate it for you.  Use the `--auto-lr` flag and it will run a
+short, internal sweep before the main training pass:
+
+```bash
+python model/train.py --auto-lr \
+    --data extract/age/age.tsv --features r_age b_age \
+    --epochs 20 --batch 32
+```
+
+It will print the suggested lr and then continue training with that
+value.  This removes the need to hand‑tune a value while still keeping
+control over the number of epochs and batch size.
+#### Per‑weight‑class training
+Since fighters only face opponents in the same weight class, the
+script can automatically split the dataset by `weight_class` and
+train a separate network on each segment.  Add `--per-class` and the
+remaining arguments (including `--auto-lr` or `--search`) are applied
+individually to each class.  Example:
+
+```bash
+python model/train.py --per-class --data extract/age/age.tsv \
+    --features r_age b_age --epochs 50 --batch 32
+```
+
+This will print a loss for each weight class and a summary at the end.
 #### Programmatic use
 You can also import the classes directly:
 

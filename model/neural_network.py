@@ -23,12 +23,19 @@ from torch.utils.data import Dataset, DataLoader
 
 class FeatureDataset(Dataset):
     def __init__(self, dataframe, feature_columns, label_column='winner'):
-        self.features = torch.tensor(
-            dataframe[feature_columns].values, dtype=torch.float32
-        )
+        # drop any rows where the requested features are missing
+        df = dataframe.dropna(subset=feature_columns)
+        arr = df[feature_columns].values.astype(float)
+        # z-score normalize each column to zero mean/ unit variance
+        # avoids huge logits when features have large range (like age)
+        mean = arr.mean(axis=0, keepdims=True)
+        std = arr.std(axis=0, keepdims=True)
+        std[std == 0] = 1.0
+        normed = (arr - mean) / std
+        self.features = torch.tensor(normed, dtype=torch.float32)
         # convert winner to binary: 'Red' -> 1, 'Blue' -> 0 (or adjust)
         self.labels = torch.tensor(
-            (dataframe[label_column] == 'Red').astype(float).values,
+            (df[label_column] == 'Red').astype(float).values,
             dtype=torch.float32,
         ).unsqueeze(1)
 
@@ -42,17 +49,66 @@ class FeatureDataset(Dataset):
 class UFCPredictor(nn.Module):
     def __init__(self, input_dim: int, hidden1: int = 64, hidden2: int = 32):
         super().__init__()
+        # note: final layer produces raw score (logit); loss function
+        # will apply sigmoid internally for stability
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden1),
             nn.Tanh(),
             nn.Linear(hidden1, hidden2),
             nn.Tanh(),
             nn.Linear(hidden2, 1),
-            nn.Sigmoid(),
         )
 
     def forward(self, x):
         return self.net(x)
+
+
+def find_learning_rate(df, feature_columns, label_column='winner',
+                       init_lr=1e-6, final_lr=10, num_iters=100,
+                       batch_size=32, device=None):
+    """Basic LR finder that returns a recommended learning rate.
+
+    It trains the network for ``num_iters`` mini-batches, exponentially
+    increasing the learning rate from ``init_lr`` to ``final_lr`` and
+    records the loss.  The return value is ``(lrs, losses, best_lr)``
+    where ``best_lr`` is the lr corresponding to the minimum loss.
+    """
+    import numpy as np
+
+    if device is None:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = UFCPredictor(input_dim=len(feature_columns)).to(device)
+    dataset = FeatureDataset(df, feature_columns, label_column)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    optimizer = optim.Adam(model.parameters(), lr=init_lr)
+    criterion = nn.BCEWithLogitsLoss()
+
+    lrs = []
+    losses = []
+    mult = (final_lr / init_lr) ** (1.0 / num_iters)
+    it = 0
+    for x_batch, y_batch in loader:
+        if it >= num_iters:
+            break
+        x_batch, y_batch = x_batch.to(device), y_batch.to(device)
+        optimizer.zero_grad()
+        preds = model(x_batch)
+        if torch.isnan(preds).any() or torch.isinf(preds).any():
+            break
+        loss = criterion(preds, y_batch)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+        lrs.append(optimizer.param_groups[0]['lr'])
+        losses.append(loss.item())
+        optimizer.param_groups[0]['lr'] *= mult
+        it += 1
+    if losses:
+        best_idx = int(np.argmin(losses))
+        best_lr = lrs[best_idx]
+    else:
+        best_lr = init_lr
+    return lrs, losses, best_lr
 
 
 def train_model(model: nn.Module,
@@ -91,7 +147,8 @@ def train_model(model: nn.Module,
     dataset = FeatureDataset(df, feature_columns, label_column)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    criterion = nn.BCELoss()
+    # use logits loss to avoid manual sigmoid and range issues
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     model.train()
@@ -102,8 +159,13 @@ def train_model(model: nn.Module,
             y_batch = y_batch.to(device)
             optimizer.zero_grad()
             preds = model(x_batch)
+            # check for NaN/inf in preds
+            if torch.isnan(preds).any() or torch.isinf(preds).any():
+                raise RuntimeError("Model produced NaN/Inf outputs; try smaller lr or add clipping")
             loss = criterion(preds, y_batch)
             loss.backward()
+            # gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             total_loss += loss.item() * x_batch.size(0)
         avg_loss = total_loss / len(dataset)
