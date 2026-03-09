@@ -18,9 +18,33 @@ DATA_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 
 
 def extract():
     df = pd.read_csv(DATA_PATH)
-    base_cols = ['r_fighter', 'b_fighter', 'winner']
-    print("No previous-opponent win history available in dataset.")
-    return df[base_cols].copy()
+    # we'll compute a running count of prior wins for each pair of fighters.
+    # canonical_key is a tuple of the two names sorted lexicographically so that
+    # events where the fighters swap red/blue sides are still grouped together.
+    history: dict[tuple[str, str], dict[str, int]] = {}
+    prev_wins = []
+    for idx, row in df.iterrows():
+        ra = row['r_fighter']
+        ba = row['b_fighter']
+        key = tuple(sorted([ra, ba]))
+        pair_hist = history.setdefault(key, {})
+        # how many times has each fighter beaten the other before this row?
+        ra_wins = pair_hist.get(ra, 0)
+        ba_wins = pair_hist.get(ba, 0)
+        # store difference (red minus blue)
+        prev_wins.append(ra_wins - ba_wins)
+        # update history with this fight's outcome
+        winner = row['winner']
+        if winner == 'Red':
+            pair_hist[ra] = ra_wins + 1
+        elif winner == 'Blue':
+            pair_hist[ba] = ba_wins + 1
+        # draws/other values are ignored
+    df = df.copy()
+    df['prev_wins_against_opp'] = prev_wins
+    base_cols = ['r_fighter', 'b_fighter', 'winner', 'prev_wins_against_opp']
+    print(f"computed prev_wins for {len(df)} fights")
+    return df[base_cols]
 
 
 if __name__ == '__main__':

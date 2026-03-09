@@ -113,6 +113,14 @@ def main():
         # many extractors use `weight_diff`; expose it as `weight_delta` as
         # well for user convenience (the README refers to weight_delta).
         df = df.rename(columns={'weight_diff': 'weight_delta'})
+    # drop any requested features that aren't present in the merged data
+    existing = [f for f in args.features if f in df.columns]
+    if not existing:
+        parser.error(f'none of the requested feature columns {args.features} are present in the merged data')
+    if len(existing) != len(args.features):
+        missing = set(args.features) - set(existing)
+        print(f'warning: dropping missing feature columns {missing}')
+    args.features = existing
     # if the user requested joint training, duplicate rows with flipped labels
     if args.joint:
         if args.invert or args.double:
