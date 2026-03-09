@@ -199,6 +199,24 @@ python model/train.py --data extract/age/*.tsv \  # any combination
     --weight-decay 1e-4 --patience 10
 ```
 
+The network now supports a **third hidden layer**; provide `--hidden3`
+(0 disables it) to make the model deeper.  When tuning you can run the
+built‑in grid search mode (`--search`) and sweep not only learning rate,
+batch size and epoch count but also hidden sizes and seeds using the
+`--hidden1-values`, `--hidden2-values`, `--hidden3-values`, and
+`--seed-values` flags:
+
+```bash
+python model/train.py --data extract/age/age.tsv extract/age_delta/age_delta.tsv \
+    --features r_age b_age age_diff \
+    --search --lr-values 1e-2,1e-3 --batch-values 32,128 \
+    --epoch-values 20,50 --hidden1-values 256,512 \
+    --hidden2-values 128,256 --hidden3-values 0,64 --seed-values 0,1,2
+```
+
+This exhaustive sweep reports the best configuration it finds along with
+its loss, taking into account variations in architecture and randomness.
+
   the `--all-features` flag builds the input list automatically;
   `--hidden1/--hidden2` control layer sizes, `--dropout` adds
   regularization, and `--weight-decay`/`--patience` enable L2 and

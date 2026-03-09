@@ -49,17 +49,23 @@ class FeatureDataset(Dataset):
 
 class UFCPredictor(nn.Module):
     def __init__(self, input_dim: int, hidden1: int = 64, hidden2: int = 32,
+                 hidden3: int = 0,
                  dropout: float = 0.0):
         super().__init__()
-        # note: final layer produces raw score (logit); loss function
-        # will apply sigmoid internally for stability
+        # Build a sequential network; hidden3 is optional (0 disables it).
         layers = [nn.Linear(input_dim, hidden1), nn.Tanh()]
         if dropout > 0:
             layers.append(nn.Dropout(dropout))
         layers.extend([nn.Linear(hidden1, hidden2), nn.Tanh()])
         if dropout > 0:
             layers.append(nn.Dropout(dropout))
-        layers.append(nn.Linear(hidden2, 1))
+        if hidden3 and hidden3 > 0:
+            layers.extend([nn.Linear(hidden2, hidden3), nn.Tanh()])
+            if dropout > 0:
+                layers.append(nn.Dropout(dropout))
+            layers.append(nn.Linear(hidden3, 1))
+        else:
+            layers.append(nn.Linear(hidden2, 1))
         self.net = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -68,7 +74,9 @@ class UFCPredictor(nn.Module):
 
 def find_learning_rate(df, feature_columns, label_column='winner',
                        init_lr=1e-6, final_lr=10, num_iters=100,
-                       batch_size=32, device=None, invert: bool = False):
+                       batch_size=32, device=None, invert: bool = False,
+                       hidden1: int = 64, hidden2: int = 32, hidden3: int = 0,
+                       dropout: float = 0.0):
     """Basic LR finder that returns a recommended learning rate.
 
     It trains the network for ``num_iters`` mini-batches, exponentially
@@ -80,7 +88,9 @@ def find_learning_rate(df, feature_columns, label_column='winner',
 
     if device is None:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = UFCPredictor(input_dim=len(feature_columns)).to(device)
+    model = UFCPredictor(input_dim=len(feature_columns),
+                          hidden1=hidden1, hidden2=hidden2,
+                          hidden3=hidden3, dropout=dropout).to(device)
     dataset = FeatureDataset(df, feature_columns, label_column,
                              invert=invert)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)

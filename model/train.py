@@ -35,6 +35,8 @@ def main():
                         help='Size of first hidden layer')
     parser.add_argument('--hidden2', type=int, default=32,
                         help='Size of second hidden layer')
+    parser.add_argument('--hidden3', type=int, default=0,
+                        help='Size of optional third hidden layer (0 disables)')
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='Dropout probability (0 disables)')
     parser.add_argument('--weight-decay', type=float, default=0.0,
@@ -49,6 +51,14 @@ def main():
                         help='Comma-separated list of batch sizes for grid search')
     parser.add_argument('--epoch-values', type=str,
                         help='Comma-separated list of epoch counts for grid search')
+    parser.add_argument('--hidden1-values', type=str,
+                        help='Comma-separated list of hidden1 sizes for grid search')
+    parser.add_argument('--hidden2-values', type=str,
+                        help='Comma-separated list of hidden2 sizes for grid search')
+    parser.add_argument('--hidden3-values', type=str,
+                        help='Comma-separated list of hidden3 sizes for grid search')
+    parser.add_argument('--seed-values', type=str,
+                        help='Comma-separated list of random seeds to test during search')
     parser.add_argument('--auto-lr', action='store_true',
                         help='Run a learning-rate finder before training')
     parser.add_argument('--per-class', action='store_true',
@@ -63,7 +73,7 @@ def main():
                         help='Train this many models and ensemble their outputs')
     args = parser.parse_args()
     # debug: display key hyperparameters
-    print(f"parsed args.hidden1={args.hidden1}, hidden2={args.hidden2}, dropout={args.dropout}")
+    print(f"parsed args.hidden1={args.hidden1}, hidden2={args.hidden2}, hidden3={args.hidden3}, dropout={args.dropout}")
 
     # read all supplied files
     dfs = [pd.read_csv(f, sep='\t') for f in args.data]
@@ -111,41 +121,52 @@ def main():
             lrs = parse_list(args.lr_values, float)
             batches = parse_list(args.batch_values, int)
             epochs_list = parse_list(args.epoch_values, int)
+            h1_list = parse_list(args.hidden1_values, int) or [args.hidden1]
+            h2_list = parse_list(args.hidden2_values, int) or [args.hidden2]
+            h3_list = parse_list(args.hidden3_values, int) or [args.hidden3]
+            seeds = parse_list(args.seed_values, int) or [None]
             if not (lrs and batches and epochs_list):
                 parser.error('Search mode requires --lr-values, --batch-values, and --epoch-values')
 
             best = None
             best_cfg = None
+            import torch
             for lr in lrs:
                 for batch in batches:
                     for epochs in epochs_list:
-                        model = UFCPredictor(input_dim=len(args.features),
-                                             hidden1=args.hidden1,
-                                             hidden2=args.hidden2,
-                                             dropout=args.dropout)
-                        print(f'-> testing lr={lr}, batch={batch}, epochs={epochs} invert={label_invert}')
-                        train_model(model, df, args.features,
-                                    epochs=epochs, lr=lr, batch_size=batch,
-                                    invert=label_invert,
-                                    weight_decay=args.weight_decay,
-                                    patience=args.patience)
-                        # after training we can compute loss on full set
-                        ds = df.dropna(subset=args.features).reset_index(drop=True)
-                        ds_model = model.eval()
-                        import torch
-                        xs = torch.tensor(ds[args.features].values.astype(float), dtype=torch.float32)
-                        with torch.no_grad():
-                            logits = ds_model(xs)
-                            lossfn = torch.nn.BCEWithLogitsLoss()
-                            ys = torch.tensor((ds['winner']=='Red').astype(float)).unsqueeze(1)
-                            if label_invert:
-                                ys = 1 - ys
-                            loss_val = lossfn(logits, ys).item()
-                        print(f'    final loss: {loss_val:.4f}')
-                        if best is None or loss_val < best:
-                            best = loss_val
-                            best_cfg = (lr, batch, epochs)
-            print(f'BEST configuration (invert={label_invert}): lr={best_cfg[0]}, batch={best_cfg[1]}, epochs={best_cfg[2]} -> loss={best:.4f}')
+                        for h1 in h1_list:
+                            for h2 in h2_list:
+                                for h3 in h3_list:
+                                    for seed in seeds:
+                                        if seed is not None:
+                                            torch.manual_seed(seed)
+                                        model = UFCPredictor(input_dim=len(args.features),
+                                                             hidden1=h1,
+                                                             hidden2=h2,
+                                                             hidden3=h3,
+                                                             dropout=args.dropout)
+                                        print(f"-> testing lr={lr}, batch={batch}, epochs={epochs} hidden1={h1} hidden2={h2} hidden3={h3} seed={seed} invert={label_invert}")
+                                        train_model(model, df, args.features,
+                                                    epochs=epochs, lr=lr, batch_size=batch,
+                                                    invert=label_invert,
+                                                    weight_decay=args.weight_decay,
+                                                    patience=args.patience)
+                                        # after training compute loss on full set
+                                        ds = df.dropna(subset=args.features).reset_index(drop=True)
+                                        ds_model = model.eval()
+                                        xs = torch.tensor(ds[args.features].values.astype(float), dtype=torch.float32)
+                                        with torch.no_grad():
+                                            logits = ds_model(xs)
+                                            lossfn = torch.nn.BCEWithLogitsLoss()
+                                            ys = torch.tensor((ds['winner']=='Red').astype(float)).unsqueeze(1)
+                                            if label_invert:
+                                                ys = 1 - ys
+                                            loss_val = lossfn(logits, ys).item()
+                                        print(f'    final loss: {loss_val:.4f}')
+                                        if best is None or loss_val < best:
+                                            best = loss_val
+                                            best_cfg = (lr, batch, epochs, h1, h2, h3, seed)
+            print(f"BEST configuration (invert={label_invert}): lr={best_cfg[0]}, batch={best_cfg[1]}, epochs={best_cfg[2]}, hidden1={best_cfg[3]}, hidden2={best_cfg[4]}, hidden3={best_cfg[5]}, seed={best_cfg[6]} -> loss={best:.4f}")
         else:
             if args.auto_lr:
                 from model.neural_network import find_learning_rate
@@ -218,6 +239,7 @@ def main():
                 m = UFCPredictor(input_dim=len(args.features),
                                   hidden1=args.hidden1,
                                   hidden2=args.hidden2,
+                                  hidden3=args.hidden3,
                                   dropout=args.dropout)
                 try:
                     m.load_state_dict(torch.load(p))
