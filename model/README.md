@@ -235,6 +235,10 @@ or generate both models in one go:
    predicting losses.  Two checkpoint files are written with suffixes
    `_win.pt` and `_loss.pt` (or a custom `--save` prefix if you provide
    one).
+* `--joint` duplicates every example with its label flipped and trains a
+   **single** model on the combined set.  This effectively uses both the
+   win and loss versions of each fight at the same time.  `--joint` cannot
+   be used together with `--invert` or `--double`.
 * `--save <prefix>` specifies a path prefix where the model(s) should be
    saved.  When using `--double` the `_win.pt`/`_loss.pt` suffixes are
    appended automatically; otherwise `_win.pt` is the default.

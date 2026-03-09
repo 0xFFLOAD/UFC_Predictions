@@ -67,6 +67,8 @@ def main():
                         help='Flip labels (Red->0, Blue->1), i.e. predict loss instead of win')
     parser.add_argument('--double', action='store_true',
                         help='Train both win and loss models sequentially')
+    parser.add_argument('--joint', action='store_true',
+                        help='Train a single model on both win and inverted-loss examples (data duplicated)')
     parser.add_argument('--save', type=str,
                         help='Path prefix to save trained model(s); extension and suffix appended automatically')
     parser.add_argument('--ensemble', type=int, default=1,
@@ -106,6 +108,14 @@ def main():
             if not new_cols:
                 continue
             df = df.merge(other[new_cols], on=on_cols, how='inner')
+    # if the user requested joint training, duplicate rows with flipped labels
+    if args.joint:
+        if args.invert or args.double:
+            parser.error('--joint cannot be used with --invert or --double')
+        inv = df.copy()
+        inv['winner'] = inv['winner'].apply(lambda w: 'Red' if w == 'Blue' else 'Blue')
+        df = pd.concat([df, inv], ignore_index=True)
+        print(f"joint mode: dataset size doubled to {len(df)} rows")
 
     def do_train(label_invert: bool, prefix: str = None):
         # build model with provided architecture params
