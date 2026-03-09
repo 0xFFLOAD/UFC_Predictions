@@ -41,8 +41,24 @@ def main():
                         help='Train separate models for each weight_class present in the data')
     args = parser.parse_args()
 
+    # read all supplied files
     dfs = [pd.read_csv(f, sep='\t') for f in args.data]
-    df = pd.concat(dfs, axis=0, ignore_index=True)
+    # if multiple files are provided, perform an inner join on the
+    # fighter identifiers rather than simply stacking rows.  This lets
+    # the caller supply distinct feature tables (e.g. age and age_delta)
+    # and train on the combined set.
+    if len(dfs) == 1:
+        df = dfs[0]
+    else:
+        # start with the first frame and merge each subsequent one
+        df = dfs[0]
+        for other in dfs[1:]:
+            # determine which columns to merge on; weight_class is
+            # included when present so that per-class splits still work
+            on_cols = ['r_fighter', 'b_fighter', 'winner']
+            if 'weight_class' in df.columns and 'weight_class' in other.columns:
+                on_cols.append('weight_class')
+            df = df.merge(other, on=on_cols, how='inner')
 
     if args.search:
         # build value lists

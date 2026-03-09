@@ -88,6 +88,11 @@ fighters from different classes never meet, so models can be trained
 on each class independently.  Simply point the training script at the
 appropriate class-specific TSV when you want to focus on one category.
 
+The new age‑delta extractor behaves the same way: `python
+extract/age_delta/age_delta.py` writes both `age_delta.tsv` and a
+collection of `age_delta_<class>.tsv` files so you can test the
+influence of pure age differences within or across weight divisions.
+
 The extractors rely on **pandas**. If you attempt to run one without
 pandas installed you'll see an error prompting installation. On macOS
 the system Python is managed by Homebrew and will refuse a normal
@@ -140,13 +145,30 @@ conda install pytorch -c pytorch
 ```
 
 #### Training via script
-Concatenate one or more TSV feature files and specify the column names
-to use as inputs:
+Supply one or more TSV feature files and list the columns to use as
+inputs. When multiple files are given the script will **join them
+horizontally** on the fighter identifiers (`r_fighter`, `b_fighter`
+(and `weight_class` if present) ) rather than stacking rows.  This
+makes it easy to experiment with combinations of features without
+manually merging datasets.
+
+Examples:
+
+* train solely on age-differences:
 
 ```bash
 python model/train.py \
-    --data extract/age/age.tsv extract/height_delta/height_delta.tsv \
-    --features height_diff reach_diff age_diff weight_diff \
+    --data extract/age_delta/age_delta.tsv \
+    --features age_diff \
+    --epochs 50 --lr 0.001
+```
+
+* train on absolute age and the pre‑computed age delta together:
+
+```bash
+python model/train.py \
+    --data extract/age/age.tsv extract/age_delta/age_delta.tsv \
+    --features r_age b_age age_diff \
     --epochs 50 --lr 0.001
 ```
 
