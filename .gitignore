@@ -1,0 +1,10 @@
+ufc_dataset/fighter_stats/fighter_stats.csv
+ufc_dataset/fighter_stats/fighters_stats.txt
+ufc_dataset/large_set/large_dataset.csv
+ufc_dataset/medium_set/medium_dataset.csv
+ufc_dataset/small_set/completed_events_small.csv
+ufc_dataset/small_set/upcoming_events_small.csv
+ufc_dataset/urls/event_urls.txt
+ufc_dataset/urls/fight_urls.txt
+ufc_dataset/urls/fighter_urls.txt
+.DS_Store
