@@ -36,7 +36,7 @@ The model uses **25 carefully engineered features** representing differences bet
 
 ### Miscellaneous
 17. **Unprepared for Fight** - Short-notice fight (binary)
-18. **Win/Loss Unprepared for Fight** - Short-notice fight (binary)
+18. 
 19. **Total Injuries in Career** - Previous injuries
 20. **Total Consecutive Wins** - Win streak
 21. **Total Special Win count** - Reason for win (opp )
@@ -167,6 +167,20 @@ python model/train.py \
     --features age_diff \
     --epochs 50 --lr 0.001
 ```
+
+* include **weight delta** (aka `weight_diff`) by running the weight
+  extractor and adding the resulting file or by using `--all-features`:
+
+```bash
+python extract/weight/weight.py           # creates weight.tsv
+python model/train.py \
+    --data extract/age/age.tsv extract/weight/weight.tsv \
+    --features r_age b_age age_diff weight_delta \
+    --epochs 50 --lr 0.001
+```
+
+The script now also renames `weight_diff` to `weight_delta` internally so
+you can refer to the latter name even though the TSV column uses `weight_diff`.
 
 * train on absolute age and the pre‑computed age delta together:
 

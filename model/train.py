@@ -108,6 +108,11 @@ def main():
             if not new_cols:
                 continue
             df = df.merge(other[new_cols], on=on_cols, how='inner')
+    # support alternate naming
+    if 'weight_diff' in df.columns and 'weight_delta' not in df.columns:
+        # many extractors use `weight_diff`; expose it as `weight_delta` as
+        # well for user convenience (the README refers to weight_delta).
+        df = df.rename(columns={'weight_diff': 'weight_delta'})
     # if the user requested joint training, duplicate rows with flipped labels
     if args.joint:
         if args.invert or args.double:
