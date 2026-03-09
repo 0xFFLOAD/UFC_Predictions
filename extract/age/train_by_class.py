@@ -55,6 +55,25 @@ def main():
                         help='Early stopping patience')
     parser.add_argument('--auto-lr', action='store_true',
                         help='Run LR finder before each class')
+
+    # hyperparameter search options (mirrors --search in model/train.py)
+    parser.add_argument('--search', action='store_true',
+                        help='Perform grid search over hyperparameters per class')
+    parser.add_argument('--lr-values',
+                        help='Comma-separated list of lr values for grid search')
+    parser.add_argument('--batch-values',
+                        help='Comma-separated list of batch sizes for grid search')
+    parser.add_argument('--epoch-values',
+                        help='Comma-separated list of epoch counts for grid search')
+    parser.add_argument('--hidden1-values',
+                        help='Comma-separated list of hidden1 sizes for grid search')
+    parser.add_argument('--hidden2-values',
+                        help='Comma-separated list of hidden2 sizes for grid search')
+    parser.add_argument('--hidden3-values',
+                        help='Comma-separated list of hidden3 sizes for grid search')
+    parser.add_argument('--seed-values',
+                        help='Comma-separated list of random seeds to test during search')
+
     parser.add_argument('--features', nargs='+', default=['r_age', 'b_age'],
                         help='Feature columns to use')
     parser.add_argument('--data', nargs='+',
@@ -132,28 +151,84 @@ def main():
                                  hidden2=args.hidden2,
                                  dropout=args.dropout)
 
-            if args.auto_lr and len(df_clean) >= args.batch:
-                from model.neural_network import find_learning_rate
-                print('  finding learning rate...')
-                lrs, losses, best_lr = find_learning_rate(df_clean, args.features,
-                                                          batch_size=args.batch,
-                                                          invert=invert_flag)
-                if best_lr is None:
-                    best_lr = args.lr
-                print(f'  suggested lr {best_lr:.6g}')
-                lr_val = best_lr
+            # determine learning rate, either via auto-lr or fixed
+            if not args.search:
+                if args.auto_lr and len(df_clean) >= args.batch:
+                    from model.neural_network import find_learning_rate
+                    print('  finding learning rate...')
+                    lrs, losses, best_lr = find_learning_rate(df_clean, args.features,
+                                                              batch_size=args.batch,
+                                                              invert=invert_flag)
+                    if best_lr is None:
+                        best_lr = args.lr
+                    print(f'  suggested lr {best_lr:.6g}')
+                    lr_val = best_lr
+                else:
+                    lr_val = args.lr
+
+                train_model(model, df_clean, args.features,
+                            epochs=args.epochs, lr=lr_val, batch_size=args.batch,
+                            invert=invert_flag,
+                            weight_decay=args.weight_decay,
+                            patience=args.patience)
+
+                torch = __import__('torch')
+                torch.save(model.state_dict(), chk)
+                print(f"Saved checkpoint to {chk}\n")
             else:
-                lr_val = args.lr
+                # perform exhaustive grid search for this class
+                def parse_list(s, cast):
+                    return [cast(x) for x in s.split(',')] if s else []
+                lrs = parse_list(args.lr_values, float)
+                batches = parse_list(args.batch_values, int)
+                epochs_list = parse_list(args.epoch_values, int)
+                h1_list = parse_list(args.hidden1_values, int) or [args.hidden1]
+                h2_list = parse_list(args.hidden2_values, int) or [args.hidden2]
+                h3_list = parse_list(args.hidden3_values, int) or [0]
+                seeds = parse_list(args.seed_values, int) or [None]
+                if not (lrs and batches and epochs_list):
+                    parser.error('Search mode requires --lr-values, --batch-values, and --epoch-values')
 
-            train_model(model, df_clean, args.features,
-                        epochs=args.epochs, lr=lr_val, batch_size=args.batch,
-                        invert=invert_flag,
-                        weight_decay=args.weight_decay,
-                        patience=args.patience)
+                best = None
+                best_cfg = None
+                import torch
+                for lr in lrs:
+                    for batch in batches:
+                        for epochs in epochs_list:
+                            for h1 in h1_list:
+                                for h2 in h2_list:
+                                    for h3 in h3_list:
+                                        for seed in seeds:
+                                            if seed is not None:
+                                                torch.manual_seed(seed)
+                                            model = UFCPredictor(input_dim=len(args.features),
+                                                                 hidden1=h1,
+                                                                 hidden2=h2,
+                                                                 hidden3=h3,
+                                                                 dropout=args.dropout)
+                                            print(f"-> class {cls}: testing lr={lr}, batch={batch}, epochs={epochs} hidden1={h1} hidden2={h2} hidden3={h3} seed={seed} invert={invert_flag}")
+                                            train_model(model, df_clean, args.features,
+                                                        epochs=epochs, lr=lr, batch_size=batch,
+                                                        invert=invert_flag,
+                                                        weight_decay=args.weight_decay,
+                                                        patience=args.patience)
+                                            # compute loss on full cleaned set
+                                            ds = df_clean.reset_index(drop=True)
+                                            ds_model = model.eval()
+                                            xs = torch.tensor(ds[args.features].values.astype(float), dtype=torch.float32)
+                                            with torch.no_grad():
+                                                logits = ds_model(xs)
+                                                lossfn = torch.nn.BCEWithLogitsLoss()
+                                                ys = torch.tensor((ds['winner']=='Red').astype(float)).unsqueeze(1)
+                                                if invert_flag:
+                                                    ys = 1 - ys
+                                                loss_val = lossfn(logits, ys).item()
+                                            print(f'    final loss: {loss_val:.4f}')
+                                            if best is None or loss_val < best:
+                                                best = loss_val
+                                                best_cfg = (lr, batch, epochs, h1, h2, h3, seed)
+                print(f"BEST configuration for class {cls} (invert={invert_flag}): lr={best_cfg[0]}, batch={best_cfg[1]}, epochs={best_cfg[2]}, hidden1={best_cfg[3]}, hidden2={best_cfg[4]}, hidden3={best_cfg[5]}, seed={best_cfg[6]} -> loss={best:.4f}")
 
-            torch = __import__('torch')
-            torch.save(model.state_dict(), chk)
-            print(f"Saved checkpoint to {chk}\n")
 
         # decide which runs to perform
         if args.double:

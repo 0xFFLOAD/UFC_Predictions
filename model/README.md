@@ -305,8 +305,13 @@ This will print a loss for each weight class and a summary at the end.
 The helper script `extract/age/train_by_class.py` offers the same
 overlapping-feature merging and, in addition, understands `--invert` and
 `--double` so you can produce loss models (or both win/loss) for every
-class in one shot.  The evaluation helper similarly supports inverted
-labels.
+class in one shot.  It also mirrors the main training script's tuning
+options: you can supply `--auto-lr` to run a short learning‑rate finder
+before each class, or use `--search` together with `--lr-values`,
+`--batch-values`, `--epoch-values`, `--hidden1-values`, etc., to perform
+a per-class grid sweep.  When `--search` is active the best configuration
+for each weight division is reported instead of saving a checkpoint.
+The evaluation helper similarly supports inverted labels.
 
 A companion evaluation helper exists at `extract/age/eval_by_class.py`.
 Run it from that directory to compute accuracy/loss against the same
