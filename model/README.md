@@ -310,7 +310,25 @@ options: you can supply `--auto-lr` to run a short learning‑rate finder
 before each class, or use `--search` together with `--lr-values`,
 `--batch-values`, `--epoch-values`, `--hidden1-values`, etc., to perform
 a per-class grid sweep.  When `--search` is active the best configuration
-for each weight division is reported instead of saving a checkpoint.
+for each weight division is reported (and the corresponding model saved)
+instead of simply training the default hyperparameters.
+
+For example, to tune a model that uses every numeric feature across all
+classes you could run from the `extract/age` folder:
+
+```bash
+python train_by_class.py \
+    --data age.tsv age_delta.tsv height_delta.tsv reach_delta.tsv weight_wl.tsv \
+    --features r_age b_age age_diff height_diff reach_diff winner_weight loser_weight \
+    --search --lr-values 1e-2,1e-3 --batch-values 32,64 \
+    --epoch-values 20,50 --hidden1-values 128,256 --hidden2-values 64,128 \
+    --hidden3-values 0,64
+```
+
+The script will merge the five tables for each weight class separately and
+return the best hyperparameters (plus save the corresponding checkpoint)
+for each division.  This is a convenient way to perform `per class splits`
+and `further tuning` on the same codebase.
 The evaluation helper similarly supports inverted labels.
 
 A companion evaluation helper exists at `extract/age/eval_by_class.py`.
