@@ -47,6 +47,77 @@ The model uses **25 carefully engineered features** representing differences bet
 
 ## Dataset
 
+## Data Extraction Scripts
+A companion `extract` directory at the project root now organizes
+each feature into its own Python package. For example, the height delta
+extractor lives in `extract/height_delta/height_delta.py` and is
+exported through the package's `__init__.py`.
+
+Each package exposes a single `extract()` function that reads the large
+set (`ufc_dataset/large_set/large_dataset.csv`) and returns the columns
+or derived values for that feature.  If the underlying dataset lacks the
+requested data, the function prints a warning and returns an empty
+DataFrame.
+
+These packages can be imported directly for use in pipelines or run as
+scripts for quick previews.
+
+Example usage::
+
+    from extract.height_delta import extract as extract_height
+    df = extract_height()
+
+or (using the package alias)::
+
+    import extract.height_delta
+    df = extract.height_delta.extract()
+
+When invoked as a script, each extractor writes the complete DataFrame
+it returns to a TSV file named `<feature>.tsv` inside its own package
+directory. Every output file now includes the fighter identifiers
+(`r_fighter`, `b_fighter`) along with the `winner` column so that all
+data stays tied to the participants and outcome; features themselves
+are appended or computed as additional columns. This avoids
+orphaned/random rows when working with individual feature files.
+
+The extractors rely on **pandas**. If you attempt to run one without
+pandas installed you'll see an error prompting installation. On macOS
+the system Python is managed by Homebrew and will refuse a normal
+`pip install`; instead use one of the following approaches:
+
+* Activate the project's Conda environment (already used by this
+  workspace). For example:
+
+```bash
+/Users/sam/miniforge3/bin/conda run -p /Users/sam/miniforge3 \
+    --no-capture-output python extract/height_delta/height_delta.py
+```
+
+  The `install_python_packages` tool has already added pandas to this
+environment, so scripts will run out‑of‑the‑box.
+
+* Create and activate a virtualenv in the repo, then `pip install
+  pandas` inside it:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install pandas
+python extract/height_delta/height_delta.py
+```
+
+* Alternatively, install pandas for your user only with `pip install
+  --user pandas` or use `pipx`.
+
+Example (assuming pandas is available):
+
+```bash
+python3 extract/height_delta/height_delta.py
+# creates extract/height_delta/height_delta.tsv
+```
+
+
+
 ## Building
 make              # Build the model
 make train        # Train from scratch
