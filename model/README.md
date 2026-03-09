@@ -7,7 +7,6 @@ Hidden Layer 1: 64 neurons (tanh activation)
 Hidden Layer 2: 32 neurons (tanh activation)
 Output Layer:   1 neuron (sigmoid) - P(fighter1 wins)
 
-
 ## Features
 The model uses **25 carefully engineered features** representing differences between fighters:
 
@@ -47,11 +46,7 @@ The model uses **25 carefully engineered features** representing differences bet
 25. **Prev Wins Against Opp** - Previous fights against opponent
 
 ## Dataset
-Trained on **30 years of UFC history** (1994-2023):
-- **7,340 fights** from `ufc_complete_dataset.csv`
-- 2,434 unique fighters
-- Comprehensive fighter statistics
-- Real fight outcomes
+
 
 ## Building
 make              # Build the model
