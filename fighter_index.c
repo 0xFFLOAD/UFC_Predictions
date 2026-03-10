@@ -1,0 +1,200 @@
+#include "fighter_index.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "cJSON.h"  /* assume cJSON is available */
+
+/* simple djb2 string hash */
+static unsigned long
+hash_string(const char *str)
+{
+    unsigned long hash = 5381;
+    int c;
+    while ((c = *str++) != 0)
+        hash = ((hash << 5) + hash) + (unsigned char)c;
+    return hash;
+}
+
+/* global table definition */
+Fighter *fighter_table[HASH_SIZE];
+
+static Fighter *alloc_fighter(void)
+{
+    Fighter *f = calloc(1, sizeof(*f));
+    return f;
+}
+
+static Fight *alloc_fight(void)
+{
+    Fight *f = calloc(1, sizeof(*f));
+    return f;
+}
+
+/* helper to duplicate a string */
+static char *dupstr(const char *s)
+{
+    size_t len = strlen(s) + 1;
+    char *d = malloc(len);
+    if (d)
+        memcpy(d, s, len);
+    return d;
+}
+
+int load_fighter_index(const char *json_path)
+{
+    FILE *fp = fopen(json_path, "rb");
+    if (!fp) {
+        perror("fopen");
+        return -1;
+    }
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    char *buf = malloc(size + 1);
+    if (!buf) {
+        fclose(fp);
+        return -1;
+    }
+    fread(buf, 1, size, fp);
+    buf[size] = '\0';
+    fclose(fp);
+
+    cJSON *root = cJSON_Parse(buf);
+    free(buf);
+    if (!root) {
+        fprintf(stderr, "JSON parse error: %s\n", cJSON_GetErrorPtr());
+        return -1;
+    }
+
+    /* determine feature names from first fighter encountered */
+    cJSON *fighter_obj = NULL;
+    cJSON_ArrayForEach(fighter_obj, root) {
+        cJSON *data = fighter_obj->child;
+        if (!data) continue;
+        cJSON *mean_stats = cJSON_GetObjectItem(data, "mean_stats");
+        if (mean_stats) {
+            int nf = cJSON_GetArraySize(mean_stats);
+            /* allocate arrays; we'll copy names later per fighter */
+            /* store in a static array for simplicity */
+            break;
+        }
+    }
+
+    /* iterate all fighters and insert into hash table */
+    cJSON *value;
+    cJSON_ArrayForEach(fighter_obj, root) {
+        const char *name = fighter_obj->string;
+        if (!name) continue;
+        Fighter *f = alloc_fighter();
+        f->name = dupstr(name);
+
+        cJSON *stats = cJSON_GetObjectItem(fighter_obj, "mean_stats");
+        if (stats && cJSON_IsObject(stats)) {
+            int nf = cJSON_GetArraySize(stats);
+            f->n_features = nf;
+            f->feature_names = malloc(sizeof(char *) * nf);
+            f->mean_stats = malloc(sizeof(double) * nf);
+            int idx = 0;
+            cJSON *stat;
+            cJSON_ArrayForEach(stat, stats) {
+                f->feature_names[idx] = dupstr(stat->string);
+                f->mean_stats[idx] = stat->valuedouble;
+                idx++;
+            }
+        }
+
+        cJSON *fights = cJSON_GetObjectItem(fighter_obj, "fights");
+        if (fights && cJSON_IsArray(fights)) {
+            cJSON *fight;
+            Fight **lastp = &f->fights;
+            cJSON_ArrayForEach(fight, fights) {
+                cJSON *opp = cJSON_GetObjectItem(fight, "opponent");
+                cJSON *won = cJSON_GetObjectItem(fight, "won");
+                cJSON *wc = cJSON_GetObjectItem(fight, "weight_class");
+                if (opp && cJSON_IsString(opp)) {
+                    Fight *ff = alloc_fight();
+                    ff->opponent = dupstr(opp->valuestring);
+                    ff->won = (won && won->type == cJSON_True) ? 1 : 0;
+                    ff->weight_class = wc && cJSON_IsString(wc) ? dupstr(wc->valuestring) : NULL;
+                    *lastp = ff;
+                    lastp = &ff->next;
+                }
+            }
+        }
+
+        /* insert into table */
+        unsigned long h = hash_string(name) % HASH_SIZE;
+        f->next = fighter_table[h];
+        fighter_table[h] = f;
+    }
+
+    cJSON_Delete(root);
+    return 0;
+}
+
+Fighter *lookup_fighter(const char *name)
+{
+    unsigned long h = hash_string(name) % HASH_SIZE;
+    Fighter *f = fighter_table[h];
+    while (f) {
+        if (strcmp(f->name, name) == 0)
+            return f;
+        f = f->next;
+    }
+    return NULL;
+}
+
+void free_fighter_index(void)
+{
+    for (size_t i = 0; i < HASH_SIZE; i++) {
+        Fighter *f = fighter_table[i];
+        while (f) {
+            Fighter *next = f->next;
+            free(f->name);
+            for (size_t j = 0; j < f->n_features; j++) {
+                free(f->feature_names[j]);
+            }
+            free(f->feature_names);
+            free(f->mean_stats);
+            Fight *g = f->fights;
+            while (g) {
+                Fight *gn = g->next;
+                free(g->opponent);
+                free(g->weight_class);
+                free(g);
+                g = gn;
+            }
+            free(f);
+            f = next;
+        }
+        fighter_table[i] = NULL;
+    }
+}
+
+/* simple demo program when compiled as standalone */
+#ifdef FIGHTER_INDEX_MAIN
+int main(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "usage: %s fighter_index.json [name]\n", argv[0]);
+        return 1;
+    }
+    if (load_fighter_index(argv[1]) != 0) {
+        return 1;
+    }
+    const char *query = argc > 2 ? argv[2] : "Conor McGregor";
+    Fighter *f = lookup_fighter(query);
+    if (!f) {
+        printf("%s not found\n", query);
+    } else {
+        printf("%s (%.0zu fights)\n", f->name, f->fights ? 1 : 0);
+        for (Fight *g = f->fights; g; g = g->next) {
+            printf("  vs %s %s (%s)\n", g->opponent,
+                   g->won ? "won" : "lost",
+                   g->weight_class ? g->weight_class : "");
+        }
+    }
+    free_fighter_index();
+    return 0;
+}
+#endif
