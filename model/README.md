@@ -135,6 +135,26 @@ python3 extract/height_delta/height_delta.py
 ```
 
 ### Model Implementation & Training
+
+#### Predicting Upcoming Fights
+
+A lightweight utility is available at the repository root for making
+predictions between two fighters by name.  It will first look for a
+recorded bout in the merged dataset and use that feature row if
+available.  If the pair has never met it synthesizes a feature vector
+from the fighters' historical averages and then runs the appropriate
+weight‑class ensemble.  Usage is as simple as:
+
+```bash
+python predict.py "Conor McGregor" "Khabib Nurmagomedov"
+```
+
+The script prints `predicted winner: Red` or `Blue`.  If the requested
+fighters are unknown to the dataset or no model exists for their weight
+class a helpful message is displayed instead.
+
+
+### Model Implementation & Training
 A basic PyTorch implementation of the UFC prediction network now
 lives in `model/neural_network.py` with a convenience training script
 at `model/train.py`.
