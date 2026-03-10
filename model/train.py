@@ -69,6 +69,8 @@ def main():
                         help='Train both win and loss models sequentially')
     parser.add_argument('--joint', action='store_true',
                         help='Train a single model on both win and inverted-loss examples (data duplicated)')
+    parser.add_argument('--scale', action='append',
+                        help='Multiply a feature column by a constant, e.g. "striking_advantage=3" (can repeat)')
     parser.add_argument('--save', type=str,
                         help='Path prefix to save trained model(s); extension and suffix appended automatically')
     parser.add_argument('--ensemble', type=int, default=1,
@@ -113,6 +115,20 @@ def main():
         # many extractors use `weight_diff`; expose it as `weight_delta` as
         # well for user convenience (the README refers to weight_delta).
         df = df.rename(columns={'weight_diff': 'weight_delta'})
+    # apply user-provided scaling if any
+    if args.scale:
+        for spec in args.scale:
+            try:
+                name,val = spec.split('=',1)
+                val = float(val)
+            except Exception:
+                print(f'warning: could not parse scale spec "{spec}"')
+                continue
+            if name in df.columns:
+                print(f'scaling column {name} by {val}')
+                df[name] = df[name] * val
+            else:
+                print(f'warning: scale column {name} not present in data')
     # drop any requested features that aren't present in the merged data
     existing = [f for f in args.features if f in df.columns]
     if not existing:

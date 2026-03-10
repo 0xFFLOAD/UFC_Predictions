@@ -37,7 +37,7 @@ feature_files = [
     'extract/grappling_score/grappling_score.tsv',
 ]
 
-def merge_all():
+def merge_all(scale_map=None):
     dfs = [pd.read_csv(f, sep='\t') for f in feature_files]
     df = dfs[0]
     for other in dfs[1:]:
@@ -48,6 +48,12 @@ def merge_all():
         df = df.merge(other[new_cols], on=on, how='inner')
     if 'weight_diff' in df.columns and 'weight_delta' not in df.columns:
         df = df.rename(columns={'weight_diff': 'weight_delta'})
+    if scale_map:
+        for name,val in scale_map.items():
+            if name in df.columns:
+                df[name] = df[name] * val
+            else:
+                print(f'warning: scale column {name} not present')
     return df
 
 # compute normalization stats
@@ -56,13 +62,31 @@ print('#ifndef MODEL_WEIGHTS_H')
 print('#define MODEL_WEIGHTS_H')
 print()
 
-if len(sys.argv) > 1:
-    ckpt = sys.argv[1]
+import argparse
+
+parser = argparse.ArgumentParser(description='Export network weights to C')
+parser.add_argument('checkpoint', nargs='?',
+                    help='checkpoint file to export (default: first found)')
+parser.add_argument('--scale', action='append',
+                    help='scale features prior to computing normalization (name=multiplier)')
+args = parser.parse_args()
+
+if args.checkpoint:
+    ckpt = args.checkpoint
 else:
     candidates = glob.glob('model/checkpoints/*_e*.pt')
     if not candidates:
         sys.exit('no checkpoints found')
     ckpt = candidates[0]
+
+scale_map = {}
+if args.scale:
+    for spec in args.scale:
+        try:
+            name,val = spec.split('=',1)
+            scale_map[name] = float(val)
+        except Exception:
+            print(f'warning: could not parse scale spec "{spec}"')
 
 # load dataset to compute mean/std
 print('// merging feature files to compute normalization parameters')
