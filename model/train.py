@@ -81,15 +81,11 @@ def main():
 
     # read all supplied files
     dfs = [pd.read_csv(f, sep='\t') for f in args.data]
-    if args.all_features:
-        # compute feature list automatically as every column except
-        # identifiers/winner/weight_class
-        sample = dfs[0]
-        base = {'r_fighter','b_fighter','winner','weight_class'}
-        auto_feats = [c for c in sample.columns if c not in base]
-        args.features = auto_feats
-    if not args.features:
+    # if user asked for all-features, we must wait until after merging
+    # so that we include columns coming from every file, not just the first.
+    if not args.features and not args.all_features:
         parser.error('Must specify --features or --all-features')
+
     # if multiple files are provided, perform an inner join on the
     # fighter identifiers rather than simply stacking rows.  This lets
     # the caller supply distinct feature tables (e.g. age and age_delta)
@@ -110,6 +106,11 @@ def main():
             if not new_cols:
                 continue
             df = df.merge(other[new_cols], on=on_cols, how='inner')
+
+    if args.all_features:
+        base = {'r_fighter','b_fighter','winner','weight_class'}
+        auto_feats = [c for c in df.columns if c not in base]
+        args.features = auto_feats
     # support alternate naming
     if 'weight_diff' in df.columns and 'weight_delta' not in df.columns:
         # many extractors use `weight_diff`; expose it as `weight_delta` as
