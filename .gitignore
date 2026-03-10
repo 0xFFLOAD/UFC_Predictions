@@ -12,3 +12,4 @@ ufc_dataset/urls/fighter_urls.txt
 *.pt
 *.pyc
 ensemble_out.txt
+merged_features.pkl
