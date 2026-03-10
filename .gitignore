@@ -13,3 +13,4 @@ ufc_dataset/urls/fighter_urls.txt
 *.pyc
 ensemble_out.txt
 merged_features.pkl
+predict_model
