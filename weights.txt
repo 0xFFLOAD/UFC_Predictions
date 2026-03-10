@@ -1,0 +1,16 @@
+feature count mismatch 19 13
+td_acc_total_diff              2.119491e+00
+td_avg_diff                    1.972483e+00
+striking_advantage             -1.147993e+00
+height_diff                    -6.633948e-01
+r_age                          -5.614387e-01
+b_age                          1.692759e-01
+td_def_total_diff              1.691690e-01
+reach_diff                     -1.136769e-01
+weight_delta                   -1.048051e-01
+age_diff                       -1.029292e-01
+prev_wins_against_opp          8.737685e-02
+grappling_score                -7.090877e-02
+td_acc_diff                    -1.422385e-02
+
+(using checkpoint model/checkpoints/UFC_Interim_Flyweight_Title_e1.pt )
