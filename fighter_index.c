@@ -171,27 +171,102 @@ void free_fighter_index(void)
     }
 }
 
+/* -------------------------------------------------------------------- */
+
+/* simple activation helpers */
+static float clip(float x) {
+    if (x > 10.0f) return 10.0f;
+    if (x < -10.0f) return -10.0f;
+    return x;
+}
+
+static float tanh_approx(float x) {
+    /* relying on math library tanhf; could implement faster but okay */
+    return tanhf(x);
+}
+
+/* normalize raw features in-place according to the stored mean/std arrays */
+float model_predict(const float *raw_features)
+{
+    float x[MODEL_INPUT_DIM];
+    for (size_t i = 0; i < MODEL_INPUT_DIM; i++) {
+        x[i] = (raw_features[i] - model_mean[i]) / model_std[i];
+        x[i] = clip(x[i]);
+    }
+    /* first layer */
+    float h1[MODEL_HIDDEN1];
+    for (size_t i = 0; i < MODEL_HIDDEN1; i++) {
+        float acc = model_b0[i];
+        for (size_t j = 0; j < MODEL_INPUT_DIM; j++)
+            acc += model_w0[i][j] * x[j];
+        h1[i] = tanh_approx(acc);
+    }
+    /* second layer */
+    float h2[MODEL_HIDDEN2];
+    for (size_t i = 0; i < MODEL_HIDDEN2; i++) {
+        float acc = model_b1[i];
+        for (size_t j = 0; j < MODEL_HIDDEN1; j++)
+            acc += model_w1[i][j] * h1[j];
+        h2[i] = tanh_approx(acc);
+    }
+    /* output layer */
+    float logit = model_b2[0];
+    for (size_t j = 0; j < MODEL_HIDDEN2; j++)
+        logit += model_w2[0][j] * h2[j];
+    /* sigmoid */
+    return 1.0f / (1.0f + expf(-logit));
+}
+
+int predict_fight(const char *f1, const char *f2, float *prob)
+{
+    Fighter *p1 = lookup_fighter(f1);
+    Fighter *p2 = lookup_fighter(f2);
+    if (!p1 || !p2)
+        return -1;
+    float input[MODEL_INPUT_DIM];
+    for (size_t i = 0; i < MODEL_INPUT_DIM; i++) {
+        float v1 = (i < p1->n_features) ? p1->mean_stats[i] : 0.0;
+        float v2 = (i < p2->n_features) ? p2->mean_stats[i] : 0.0;
+        input[i] = v1 - v2;
+    }
+    *prob = model_predict(input);
+    return 0;
+}
+
 /* simple demo program when compiled as standalone */
 #ifdef FIGHTER_INDEX_MAIN
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: %s fighter_index.json [name]\n", argv[0]);
+        fprintf(stderr, "usage: %s fighter_index.json [fighter1 fighter2]\n", argv[0]);
         return 1;
     }
     if (load_fighter_index(argv[1]) != 0) {
         return 1;
     }
-    const char *query = argc > 2 ? argv[2] : "Conor McGregor";
-    Fighter *f = lookup_fighter(query);
-    if (!f) {
-        printf("%s not found\n", query);
+    if (argc >= 4) {
+        const char *f1 = argv[2];
+        const char *f2 = argv[3];
+        float prob;
+        if (predict_fight(f1, f2, &prob) == 0) {
+            printf("%s vs %s -> probability red wins (first name): %.2f%%\n",
+                   f1, f2, prob * 100.0f);
+            printf("predicted winner: %s\n", prob > 0.5f ? f1 : f2);
+        } else {
+            printf("one or both fighters not found in index\n");
+        }
     } else {
-        printf("%s (%.0zu fights)\n", f->name, f->fights ? 1 : 0);
-        for (Fight *g = f->fights; g; g = g->next) {
-            printf("  vs %s %s (%s)\n", g->opponent,
-                   g->won ? "won" : "lost",
-                   g->weight_class ? g->weight_class : "");
+        const char *query = argc > 2 ? argv[2] : "Conor McGregor";
+        Fighter *f = lookup_fighter(query);
+        if (!f) {
+            printf("%s not found\n", query);
+        } else {
+            printf("%s (%.0zu fights)\n", f->name, f->fights ? 1 : 0);
+            for (Fight *g = f->fights; g; g = g->next) {
+                printf("  vs %s %s (%s)\n", g->opponent,
+                       g->won ? "won" : "lost",
+                       g->weight_class ? g->weight_class : "");
+            }
         }
     }
     free_fighter_index();

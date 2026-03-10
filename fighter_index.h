@@ -34,4 +34,20 @@ Fighter *lookup_fighter(const char *name);
 /* free all memory allocated by load_fighter_index */
 void free_fighter_index(void);
 
+/* --- model inference -------------------------------------------------- */
+
+/* input dimension and feature names come from the generated weights header
+   (MODEL_INPUT_DIM and model_feature_names).  The caller should compute an
+   input vector by subtracting fighter1 minus fighter2 statistics; see
+   predict_fight below. */
+
+/* normalize and run the network; returns value in [0,1] giving probability
+   that the "red" side wins. */
+float model_predict(const float *raw_features);
+
+/* convenience: look up two fighters and fill ``*prob`` with the predicted
+   probability that `f1` beats `f2`.  Returns 0 on success, -1 if either
+   fighter is missing. */
+int predict_fight(const char *f1, const char *f2, float *prob);
+
 #endif /* FIGHTER_INDEX_H */
